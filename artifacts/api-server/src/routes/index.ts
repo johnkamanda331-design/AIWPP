@@ -1,8 +1,42 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
+import authRouter from "./auth";
+import dashboardRouter from "./dashboard";
+import monitoringRouter from "./monitoring";
+import faultsRouter from "./faults";
+import eventsRouter from "./events";
+import schedulesRouter from "./schedules";
+import controlRouter from "./control";
+import learningRouter from "./learning";
+import signatureRouter from "./signature";
+import analyticsRouter from "./analytics";
+import energyRouter from "./energy";
+import healthScoreRouter from "./health-score";
+import notificationsRouter from "./notifications";
+import settingsRouter from "./settings";
+import firmwareRouter from "./firmware";
+import usersRouter from "./users";
+import reportsRouter from "./reports";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(authRouter);
+router.use(dashboardRouter);
+router.use(monitoringRouter);
+router.use(faultsRouter);
+router.use(eventsRouter);
+router.use(schedulesRouter);
+router.use(controlRouter);
+router.use(learningRouter);
+router.use(signatureRouter);
+router.use(analyticsRouter);
+router.use(energyRouter);
+router.use(healthScoreRouter);
+router.use(notificationsRouter);
+router.use(settingsRouter);
+router.use(firmwareRouter);
+router.use(usersRouter);
+router.use(reportsRouter);
 
 export default router;

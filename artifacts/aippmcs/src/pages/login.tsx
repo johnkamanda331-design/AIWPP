@@ -77,7 +77,7 @@ export default function Login() {
           <CardTitle className="text-2xl font-bold tracking-tight">Mtiririko</CardTitle>
           <CardDescription className="font-medium text-muted-foreground">
             {mode === "login"
-              ? "Pump Protection &amp; Control System"
+              ? "Pump Protection & Control System"
               : "First-time setup — create the administrator account"}
           </CardDescription>
         </CardHeader>

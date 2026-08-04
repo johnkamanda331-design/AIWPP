@@ -1,7 +1,7 @@
 kind = "web"
 previewPath = "/"
 title = "AIPPMCS Dashboard"
-description = "Adaptive Intelligent Water Pump Protection, Monitoring and Control System — a professional industrial-grade web dashboard for real-time monitoring, control, fault detection, adaptive learning, scheduling, analytics, and energy management of ESP32-based pump controllers. Designed for operators, technicians, and administrators managing water pump infrastructure."
+description = "Adaptive Intelligent Water Pump Protection, Monitoring and Control System — a professional industrial-grade web dashboard for real-time monitoring, control, fault detection, adaptive learning, scheduling, analytics, and energy management of ESP32-based pump controllers."
 version = "1.0.0"
 id = "artifacts/aippmcs"
 router = "path"

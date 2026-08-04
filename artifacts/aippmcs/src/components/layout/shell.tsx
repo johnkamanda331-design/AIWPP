@@ -20,6 +20,7 @@ import {
   User as UserIcon,
   HardDrive
 } from "lucide-react";
+import { MtiririkoLogo } from "@/components/ui/logo";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState } from "react";
@@ -67,7 +68,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
         );
       })}
-      
+
       {user?.role === "administrator" && (
         <Link href="/users" onClick={onClick}>
           <div
@@ -86,23 +87,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     </div>
   );
 
+  const Brand = () => (
+    <div className="flex items-center gap-2.5">
+      <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground shadow-sm">
+        <MtiririkoLogo size={18} />
+      </div>
+      <span className="font-bold tracking-tight text-sidebar-foreground text-sm">Mtiririko</span>
+    </div>
+  );
+
   return (
     <div className="flex h-screen w-full bg-background overflow-hidden text-foreground">
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-64 h-full bg-sidebar border-r border-sidebar-border shadow-sm z-10 flex-shrink-0">
         <div className="h-16 flex items-center px-6 border-b border-sidebar-border">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded bg-primary flex items-center justify-center text-primary-foreground">
-              <Zap className="w-4 h-4" />
-            </div>
-            <span className="font-bold tracking-tight text-sidebar-foreground uppercase text-sm">AIPPMCS</span>
-          </div>
+          <Brand />
         </div>
-        
+
         <div className="flex-1 overflow-y-auto py-4 px-3 custom-scrollbar">
           <NavLinks />
         </div>
-        
+
         <div className="p-4 border-t border-sidebar-border flex flex-col gap-2">
           <div className="flex items-center gap-3 px-2 py-2">
             <div className="w-8 h-8 rounded-full bg-sidebar-accent flex items-center justify-center border border-sidebar-border flex-shrink-0">
@@ -133,12 +138,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </SheetTrigger>
               <SheetContent side="left" className="w-64 p-0 bg-sidebar border-r-sidebar-border">
                 <div className="h-16 flex items-center px-6 border-b border-sidebar-border">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded bg-primary flex items-center justify-center text-primary-foreground">
-                      <Zap className="w-4 h-4" />
-                    </div>
-                    <span className="font-bold tracking-tight text-sidebar-foreground uppercase text-sm">AIPPMCS</span>
-                  </div>
+                  <Brand />
                 </div>
                 <div className="p-4 overflow-y-auto h-[calc(100vh-4rem)]">
                   <NavLinks onClick={() => setMobileMenuOpen(false)} />
@@ -149,13 +149,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {location === "/" ? "Dashboard" : location.substring(1).replace("-", " ")}
             </h1>
           </div>
-          
+
           <div className="flex items-center gap-4">
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary text-secondary-foreground text-xs font-medium border border-border">
               <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
               System Online
             </div>
-            
+
             <Link href="/notifications">
               <Button variant="ghost" size="icon" className="relative cursor-pointer">
                 <Bell className="w-5 h-5" />

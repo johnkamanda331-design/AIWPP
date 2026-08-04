@@ -25,7 +25,7 @@ The frontend proxies all `/api/*` requests to the API server (configured in `art
 
 | Secret | Description |
 |---|---|
-| `DATABASE_URL` | Neon PostgreSQL connection string |
+| `NEON_DATABASE_URL` | Neon PostgreSQL connection string |
 | `SESSION_SECRET` | JWT signing secret |
 
 ## First-time setup

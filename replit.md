@@ -1,11 +1,13 @@
-# [Project name]
+# Mtiririko — AIPPMCS Dashboard
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Industrial-grade web dashboard for real-time monitoring, control, fault detection, and energy management of an ESP32-based water pump controller.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
+- **Frontend** (workflow `artifacts/aippmcs: web`): `PORT=22559 pnpm --filter @workspace/aippmcs run dev`
+  - Must set `PORT=22559` — artifact.toml routes the preview proxy to that port
+- **API server** (workflow `artifacts/api-server: API Server`): `pnpm --filter @workspace/api-server run dev`
+- `pnpm run typecheck` — full typecheck across all packages (requires codegen first)
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)

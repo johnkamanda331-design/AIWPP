@@ -1,0 +1,1 @@
+- [Frontend port wiring](frontend-port.md) — aippmcs Vite dev server must be started with PORT=22559; omitting it defaults to 5173 and the preview proxy shows a blank page

@@ -18,7 +18,8 @@ import {
   Bell,
   LogOut,
   User as UserIcon,
-  HardDrive
+  HardDrive,
+  ChevronRight,
 } from "lucide-react";
 import { MtiririkoLogo } from "@/components/ui/logo";
 import { Button } from "@/components/ui/button";
@@ -26,81 +27,159 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
-const NAV_ITEMS = [
-  { href: "/", label: "Dashboard", icon: Activity },
-  { href: "/monitoring", label: "Live Monitoring", icon: Radio },
-  { href: "/control", label: "Remote Control", icon: Power },
-  { href: "/faults", label: "Fault Detection", icon: AlertTriangle },
-  { href: "/events", label: "Event Timeline", icon: Clock },
-  { href: "/scheduler", label: "Scheduler", icon: Calendar },
-  { href: "/energy", label: "Energy Mgmt", icon: Zap },
-  { href: "/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/health", label: "Health Score", icon: ShieldAlert },
-  { href: "/learning", label: "Adaptive Learning", icon: Cpu },
-  { href: "/signature", label: "Electrical Signature", icon: Activity },
-  { href: "/reports", label: "Reports", icon: FileText },
-  { href: "/settings", label: "Settings", icon: Settings },
-  { href: "/firmware", label: "Firmware OTA", icon: HardDrive },
+type NavItem = { href: string; label: string; icon: React.ComponentType<{ className?: string }> };
+type NavSection = { title: string; items: NavItem[] };
+
+const NAV_SECTIONS: NavSection[] = [
+  {
+    title: "Operations",
+    items: [
+      { href: "/", label: "Dashboard", icon: Activity },
+      { href: "/monitoring", label: "Live Monitoring", icon: Radio },
+      { href: "/control", label: "Remote Control", icon: Power },
+    ],
+  },
+  {
+    title: "Protection",
+    items: [
+      { href: "/faults", label: "Fault Detection", icon: AlertTriangle },
+      { href: "/events", label: "Event Timeline", icon: Clock },
+      { href: "/health", label: "Health Score", icon: ShieldAlert },
+    ],
+  },
+  {
+    title: "Optimisation",
+    items: [
+      { href: "/scheduler", label: "Scheduler", icon: Calendar },
+      { href: "/energy", label: "Energy Management", icon: Zap },
+      { href: "/learning", label: "Adaptive Learning", icon: Cpu },
+      { href: "/signature", label: "Electrical Signature", icon: Activity },
+    ],
+  },
+  {
+    title: "Insights",
+    items: [
+      { href: "/analytics", label: "Analytics", icon: BarChart3 },
+      { href: "/reports", label: "Reports", icon: FileText },
+    ],
+  },
+  {
+    title: "System",
+    items: [
+      { href: "/settings", label: "Settings", icon: Settings },
+      { href: "/firmware", label: "Firmware OTA", icon: HardDrive },
+    ],
+  },
 ];
+
+const PAGE_TITLES: Record<string, string> = {
+  "/": "Dashboard",
+  "/monitoring": "Live Monitoring",
+  "/control": "Remote Control",
+  "/faults": "Fault Detection",
+  "/events": "Event Timeline",
+  "/health": "Health Score",
+  "/scheduler": "Scheduler",
+  "/energy": "Energy Management",
+  "/learning": "Adaptive Learning",
+  "/signature": "Electrical Signature",
+  "/analytics": "Analytics",
+  "/reports": "Reports",
+  "/settings": "Settings",
+  "/firmware": "Firmware OTA",
+  "/notifications": "Notifications",
+  "/users": "User Management",
+};
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const [location] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  const pageTitle = PAGE_TITLES[location] ?? location.substring(1).replace(/-/g, " ");
+
   const NavLinks = ({ onClick }: { onClick?: () => void }) => (
-    <div className="flex flex-col gap-1 w-full">
-      {NAV_ITEMS.map((item) => {
-        const isActive = location === item.href;
-        return (
-          <Link key={item.href} href={item.href} onClick={onClick}>
-            <div
-              className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-md transition-all text-sm font-medium cursor-pointer",
-                isActive
-                  ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              )}
-            >
-              <item.icon className={cn("w-4 h-4", isActive ? "text-sidebar-primary-foreground" : "text-sidebar-foreground opacity-70")} />
-              {item.label}
-            </div>
-          </Link>
-        );
-      })}
+    <div className="flex flex-col gap-5 w-full">
+      {NAV_SECTIONS.map((section) => (
+        <div key={section.title}>
+          <div className="px-3 mb-1">
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/35 select-none">
+              {section.title}
+            </span>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            {section.items.map((item) => {
+              const isActive = location === item.href;
+              return (
+                <Link key={item.href} href={item.href} onClick={onClick}>
+                  <div
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2 rounded-md transition-all text-sm font-medium cursor-pointer group",
+                      isActive
+                        ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
+                        : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    )}
+                  >
+                    <item.icon
+                      className={cn(
+                        "w-4 h-4 shrink-0 transition-opacity",
+                        isActive ? "opacity-100" : "opacity-50 group-hover:opacity-80"
+                      )}
+                    />
+                    <span className="truncate">{item.label}</span>
+                    {isActive && (
+                      <ChevronRight className="w-3 h-3 ml-auto opacity-60" />
+                    )}
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      ))}
 
       {user?.role === "administrator" && (
-        <Link href="/users" onClick={onClick}>
-          <div
-            className={cn(
-              "flex items-center gap-3 px-3 py-2 rounded-md transition-all text-sm font-medium mt-4 border border-sidebar-border cursor-pointer",
-              location === "/users"
-                ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
-                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-            )}
-          >
-            <Users className="w-4 h-4 opacity-70" />
-            User Management
+        <div>
+          <div className="px-3 mb-1">
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/35 select-none">
+              Admin
+            </span>
           </div>
-        </Link>
+          <Link href="/users" onClick={onClick}>
+            <div
+              className={cn(
+                "flex items-center gap-3 px-3 py-2 rounded-md transition-all text-sm font-medium cursor-pointer group",
+                location === "/users"
+                  ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
+                  : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              )}
+            >
+              <Users className="w-4 h-4 shrink-0 opacity-50 group-hover:opacity-80" />
+              User Management
+            </div>
+          </Link>
+        </div>
       )}
     </div>
   );
 
   const Brand = () => (
     <div className="flex items-center gap-2.5">
-      <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground shadow-sm">
-        <MtiririkoLogo size={18} />
+      <div className="w-7 h-7 rounded-md bg-primary/90 flex items-center justify-center text-primary-foreground shadow-sm">
+        <MtiririkoLogo size={16} />
       </div>
-      <span className="font-bold tracking-tight text-sidebar-foreground text-sm">Mtiririko</span>
+      <div className="flex flex-col leading-none">
+        <span className="font-bold tracking-tight text-sidebar-foreground text-sm">Mtiririko</span>
+        <span className="text-[10px] text-sidebar-foreground/40 tracking-wide font-medium">PUMP CONTROL</span>
+      </div>
     </div>
   );
 
   return (
     <div className="flex h-screen w-full bg-background overflow-hidden text-foreground">
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col w-64 h-full bg-sidebar border-r border-sidebar-border shadow-sm z-10 flex-shrink-0">
-        <div className="h-16 flex items-center px-6 border-b border-sidebar-border">
+      <aside className="hidden md:flex flex-col w-60 h-full bg-sidebar border-r border-sidebar-border shadow-sm z-10 flex-shrink-0">
+        <div className="h-14 flex items-center px-5 border-b border-sidebar-border/60">
           <Brand />
         </div>
 
@@ -108,65 +187,71 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <NavLinks />
         </div>
 
-        <div className="p-4 border-t border-sidebar-border flex flex-col gap-2">
-          <div className="flex items-center gap-3 px-2 py-2">
-            <div className="w-8 h-8 rounded-full bg-sidebar-accent flex items-center justify-center border border-sidebar-border flex-shrink-0">
-              <UserIcon className="w-4 h-4 text-sidebar-foreground" />
+        <div className="p-3 border-t border-sidebar-border/60">
+          <div className="flex items-center gap-2.5 px-2 py-2 mb-1">
+            <div className="w-7 h-7 rounded-full bg-sidebar-accent flex items-center justify-center border border-sidebar-border flex-shrink-0">
+              <UserIcon className="w-3.5 h-3.5 text-sidebar-foreground/70" />
             </div>
-            <div className="flex flex-col overflow-hidden">
-              <span className="text-sm font-medium text-sidebar-foreground truncate">{user?.username}</span>
-              <span className="text-xs text-sidebar-foreground opacity-60 capitalize truncate">{user?.role}</span>
+            <div className="flex flex-col overflow-hidden min-w-0">
+              <span className="text-sm font-medium text-sidebar-foreground truncate leading-tight">{user?.username}</span>
+              <span className="text-[11px] text-sidebar-foreground/40 capitalize truncate leading-tight">{user?.role}</span>
             </div>
           </div>
-          <Button variant="ghost" className="w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" onClick={() => logout()}>
-            <LogOut className="w-4 h-4 mr-2" />
+          <button
+            onClick={() => logout()}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+          >
+            <LogOut className="w-3.5 h-3.5 shrink-0" />
             Log out
-          </Button>
+          </button>
         </div>
       </aside>
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 h-full">
         {/* Top Navbar */}
-        <header className="h-16 flex-shrink-0 border-b border-border bg-card flex items-center justify-between px-4 lg:px-8 z-10">
-          <div className="flex items-center gap-4">
+        <header className="h-14 flex-shrink-0 border-b border-border bg-card flex items-center justify-between px-4 lg:px-6 z-10">
+          <div className="flex items-center gap-3">
             <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="md:hidden">
-                  <Menu className="w-5 h-5" />
+                <Button variant="ghost" size="icon" className="md:hidden h-8 w-8">
+                  <Menu className="w-4 h-4" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="left" className="w-64 p-0 bg-sidebar border-r-sidebar-border">
-                <div className="h-16 flex items-center px-6 border-b border-sidebar-border">
+              <SheetContent side="left" className="w-60 p-0 bg-sidebar border-r-sidebar-border">
+                <div className="h-14 flex items-center px-5 border-b border-sidebar-border/60">
                   <Brand />
                 </div>
-                <div className="p-4 overflow-y-auto h-[calc(100vh-4rem)]">
+                <div className="p-3 overflow-y-auto h-[calc(100vh-3.5rem)]">
                   <NavLinks onClick={() => setMobileMenuOpen(false)} />
                 </div>
               </SheetContent>
             </Sheet>
-            <h1 className="text-lg font-semibold tracking-tight hidden sm:block capitalize">
-              {location === "/" ? "Dashboard" : location.substring(1).replace("-", " ")}
-            </h1>
+
+            <div className="flex items-center gap-2">
+              <h1 className="text-sm font-semibold tracking-tight text-foreground hidden sm:block capitalize">
+                {pageTitle}
+              </h1>
+            </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary text-secondary-foreground text-xs font-medium border border-border">
-              <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-              System Online
+          <div className="flex items-center gap-2">
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded bg-primary/8 text-primary border border-primary/15 text-xs font-medium">
+              <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+              Online
             </div>
 
             <Link href="/notifications">
-              <Button variant="ghost" size="icon" className="relative cursor-pointer">
-                <Bell className="w-5 h-5" />
-                <span className="absolute top-1.5 right-2 w-2 h-2 rounded-full bg-destructive border border-card" />
+              <Button variant="ghost" size="icon" className="relative h-8 w-8 cursor-pointer">
+                <Bell className="w-4 h-4" />
+                <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-destructive border border-card" />
               </Button>
             </Link>
           </div>
         </header>
 
         {/* Scrollable Content */}
-        <main className="flex-1 overflow-auto bg-background p-4 lg:p-8">
+        <main className="flex-1 overflow-auto bg-background p-4 lg:p-6">
           <div className="max-w-7xl mx-auto w-full">
             {children}
           </div>

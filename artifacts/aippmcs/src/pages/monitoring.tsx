@@ -3,6 +3,25 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Activity, Power, Zap, Thermometer, Radio, ArrowRightLeft } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { useEffect, useRef, useState } from "react";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+} from "recharts";
+
+const MAX_POINTS = 40;
+
+type ChartPoint = {
+  ts: string;
+  voltage: number;
+  current: number;
+  power: number;
+};
 
 export default function Monitoring() {
   const { data: telemetry, isLoading } = useGetLiveData({
@@ -12,159 +31,302 @@ export default function Monitoring() {
     }
   });
 
-  if (isLoading) {
-    return <MonitoringSkeleton />;
-  }
+  const bufferRef = useRef<ChartPoint[]>([]);
+  const [chartData, setChartData] = useState<ChartPoint[]>([]);
 
+  useEffect(() => {
+    if (!telemetry) return;
+    const now = new Date();
+    const point: ChartPoint = {
+      ts: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      voltage: Number(telemetry.voltage.toFixed(1)),
+      current: Number(telemetry.current.toFixed(2)),
+      power: Number((telemetry.realPower / 1000).toFixed(3)),
+    };
+    bufferRef.current = [...bufferRef.current.slice(-(MAX_POINTS - 1)), point];
+    setChartData([...bufferRef.current]);
+  }, [telemetry]);
+
+  if (isLoading) return <MonitoringSkeleton />;
   if (!telemetry) return null;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
+    <div className="space-y-5">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Live Monitoring</h1>
-          <p className="text-sm text-muted-foreground mt-1">Real-time electrical telemetry and controller status</p>
+          <p className="text-sm text-muted-foreground mt-0.5">Real-time electrical telemetry · 2 s refresh</p>
         </div>
-        <div className="flex items-center gap-2 text-sm font-medium px-3 py-1.5 bg-secondary rounded-md border text-secondary-foreground">
-          <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-          Live Update (2s)
+        <div className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 bg-primary/8 text-primary border border-primary/20 rounded">
+          <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+          Live
         </div>
       </div>
 
-      {/* Main Electrical Parameters */}
+      {/* Primary Electrical Parameters */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <ParameterCard 
-          title="Voltage" 
-          value={telemetry.voltage.toFixed(1)} 
-          unit="V" 
+        <ParameterCard
+          title="Voltage"
+          value={telemetry.voltage.toFixed(1)}
+          unit="V"
           icon={Zap}
-          trend={telemetry.historicalMax?.voltage ? ((telemetry.voltage / telemetry.historicalMax.voltage) * 100) : undefined}
+          trend={telemetry.historicalMax?.voltage
+            ? (telemetry.voltage / telemetry.historicalMax.voltage) * 100
+            : undefined}
           min={telemetry.historicalMin?.voltage}
           max={telemetry.historicalMax?.voltage}
         />
-        <ParameterCard 
-          title="Current" 
-          value={telemetry.current.toFixed(2)} 
-          unit="A" 
+        <ParameterCard
+          title="Current"
+          value={telemetry.current.toFixed(2)}
+          unit="A"
           icon={Activity}
-          trend={telemetry.historicalMax?.current ? ((telemetry.current / telemetry.historicalMax.current) * 100) : undefined}
+          trend={telemetry.historicalMax?.current
+            ? (telemetry.current / telemetry.historicalMax.current) * 100
+            : undefined}
           min={telemetry.historicalMin?.current}
           max={telemetry.historicalMax?.current}
         />
-        <ParameterCard 
-          title="Real Power" 
-          value={(telemetry.realPower / 1000).toFixed(2)} 
-          unit="kW" 
+        <ParameterCard
+          title="Real Power"
+          value={(telemetry.realPower / 1000).toFixed(2)}
+          unit="kW"
           icon={Power}
-          trend={telemetry.historicalMax?.realPower ? ((telemetry.realPower / telemetry.historicalMax.realPower) * 100) : undefined}
+          trend={telemetry.historicalMax?.realPower
+            ? (telemetry.realPower / telemetry.historicalMax.realPower) * 100
+            : undefined}
         />
-        <ParameterCard 
-          title="Power Factor" 
-          value={telemetry.powerFactor.toFixed(2)} 
-          unit="" 
+        <ParameterCard
+          title="Power Factor"
+          value={telemetry.powerFactor.toFixed(3)}
+          unit=""
           icon={ArrowRightLeft}
           trend={telemetry.powerFactor * 100}
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Additional Power Metrics */}
-        <Card className="col-span-1 shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-lg">Power Quality</CardTitle>
+      {/* Live Trend Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <TrendChart
+          title="Voltage"
+          unit="V"
+          dataKey="voltage"
+          data={chartData}
+          color="hsl(var(--chart-4))"
+          domain={['auto', 'auto']}
+        />
+        <TrendChart
+          title="Current"
+          unit="A"
+          dataKey="current"
+          data={chartData}
+          color="hsl(var(--chart-1))"
+          domain={[0, 'auto']}
+        />
+        <TrendChart
+          title="Real Power"
+          unit="kW"
+          dataKey="power"
+          data={chartData}
+          color="hsl(var(--chart-2))"
+          domain={[0, 'auto']}
+        />
+      </div>
+
+      {/* Secondary Cards */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Power Quality */}
+        <Card className="shadow-xs border-border/60">
+          <CardHeader className="pt-5 px-5 pb-3">
+            <CardTitle className="text-sm font-semibold text-foreground">Power Quality</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <MetricRow label="Frequency" value={telemetry.frequency.toFixed(2)} unit="Hz" />
-            <MetricRow label="Apparent Power" value={(telemetry.apparentPower / 1000).toFixed(2)} unit="kVA" />
-            <MetricRow label="Reactive Power" value={(telemetry.reactivePower / 1000).toFixed(2)} unit="kVAR" />
-            <MetricRow label="Total Energy" value={telemetry.energy.toFixed(1)} unit="kWh" />
-            <MetricRow label="Today's Runtime" value={telemetry.runtime.toFixed(1)} unit="hours" />
+          <CardContent className="px-5 pb-5 space-y-1">
+            <MetricRow label="Frequency"      value={telemetry.frequency.toFixed(2)}                  unit="Hz"   />
+            <MetricRow label="Apparent Power" value={(telemetry.apparentPower / 1000).toFixed(2)}     unit="kVA"  />
+            <MetricRow label="Reactive Power" value={(telemetry.reactivePower / 1000).toFixed(2)}     unit="kVAR" />
+            <MetricRow label="Total Energy"   value={telemetry.energy.toFixed(1)}                     unit="kWh"  />
+            <MetricRow label="Today's Runtime" value={telemetry.runtime.toFixed(1)}                   unit="hrs"  />
           </CardContent>
         </Card>
 
-        {/* System States */}
-        <Card className="col-span-1 shadow-sm bg-sidebar text-sidebar-foreground border-sidebar-border">
-          <CardHeader>
-            <CardTitle className="text-lg text-sidebar-foreground">Hardware States</CardTitle>
+        {/* Hardware States */}
+        <Card className="shadow-xs bg-sidebar text-sidebar-foreground border-sidebar-border/80">
+          <CardHeader className="pt-5 px-5 pb-3">
+            <CardTitle className="text-sm font-semibold text-sidebar-foreground">Hardware States</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-6">
-            <StateIndicator label="Motor State" state={telemetry.motorState} />
+          <CardContent className="px-5 pb-5 space-y-4">
+            <StateIndicator label="Motor State"  state={telemetry.motorState}  />
             <StateIndicator label="Supply State" state={telemetry.supplyState} />
-            <StateIndicator label="Relay State" state={telemetry.relayState} />
+            <StateIndicator label="Relay State"  state={telemetry.relayState}  />
           </CardContent>
         </Card>
 
-        {/* Environment & Comms */}
-        <Card className="col-span-1 shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-lg">Environment & Comm</CardTitle>
+        {/* Environment & Comm */}
+        <Card className="shadow-xs border-border/60">
+          <CardHeader className="pt-5 px-5 pb-3">
+            <CardTitle className="text-sm font-semibold text-foreground">Environment &amp; Comm</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent className="px-5 pb-5 space-y-5">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-lg bg-secondary flex items-center justify-center">
-                <Thermometer className="w-6 h-6 text-muted-foreground" />
+              <div className="w-10 h-10 rounded-lg bg-secondary/70 flex items-center justify-center shrink-0">
+                <Thermometer className="w-5 h-5 text-muted-foreground" />
               </div>
               <div className="flex-1">
-                <div className="text-sm text-muted-foreground">Internal Temp</div>
-                <div className="text-2xl font-bold text-mono flex items-end gap-1">
-                  {telemetry.internalTemp.toFixed(1)} <span className="text-base text-muted-foreground font-sans">°C</span>
+                <div className="text-xs text-muted-foreground mb-0.5">Internal Temp</div>
+                <div className="text-2xl font-bold font-mono">
+                  {telemetry.internalTemp.toFixed(1)}
+                  <span className="text-sm text-muted-foreground font-sans ml-1">°C</span>
                 </div>
               </div>
             </div>
-            
-            <div className="flex items-center gap-4 pt-4 border-t">
-              <div className="w-12 h-12 rounded-lg bg-secondary flex items-center justify-center">
-                <Radio className="w-6 h-6 text-muted-foreground" />
-              </div>
-              <div className="flex-1 space-y-1">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Signal Quality</span>
-                  <span className="font-mono">{telemetry.communicationQuality}%</span>
+
+            <div className="pt-4 border-t border-border/40">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-lg bg-secondary/70 flex items-center justify-center shrink-0">
+                  <Radio className="w-5 h-5 text-muted-foreground" />
                 </div>
-                <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-primary" 
-                    style={{ width: `${telemetry.communicationQuality}%` }} 
-                  />
+                <div className="flex-1 space-y-1.5">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Signal Quality</span>
+                    <span className="font-mono text-foreground">{telemetry.communicationQuality}%</span>
+                  </div>
+                  <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
+                    <div
+                      className={cn(
+                        "h-full rounded-full transition-all duration-500",
+                        telemetry.communicationQuality > 70 ? "bg-primary" :
+                        telemetry.communicationQuality > 40 ? "bg-warning" : "bg-destructive"
+                      )}
+                      style={{ width: `${telemetry.communicationQuality}%` }}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
-
-      {/* TODO: Add recharts live scrolling chart here */}
     </div>
   );
 }
 
-function ParameterCard({ title, value, unit, icon: Icon, trend, min, max }: any) {
+/* ── Sub-components ─────────────────────────────────────────────────────────── */
+
+function TrendChart({
+  title, unit, dataKey, data, color, domain,
+}: {
+  title: string;
+  unit: string;
+  dataKey: keyof ChartPoint;
+  data: ChartPoint[];
+  color: string;
+  domain: [number | string, number | string];
+}) {
+  const latest = data[data.length - 1]?.[dataKey];
+
   return (
-    <Card className="shadow-sm relative overflow-hidden group">
-      <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-        <Icon className="w-16 h-16" />
-      </div>
-      <CardContent className="p-6 relative z-10">
-        <div className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-2">
-          <Icon className="w-4 h-4" />
+    <Card className="shadow-xs border-border/60">
+      <CardHeader className="pt-5 px-5 pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm font-semibold text-foreground">{title}</CardTitle>
+          {latest !== undefined && (
+            <span className="text-sm font-bold font-mono text-foreground">
+              {latest} <span className="text-xs text-muted-foreground font-sans">{unit}</span>
+            </span>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="px-2 pb-4">
+        {data.length < 2 ? (
+          <div className="h-28 flex items-center justify-center text-xs text-muted-foreground">
+            Collecting data…
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={112}>
+            <AreaChart data={data} margin={{ top: 4, right: 8, left: -24, bottom: 0 }}>
+              <defs>
+                <linearGradient id={`grad-${dataKey}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor={color} stopOpacity={0.2} />
+                  <stop offset="95%" stopColor={color} stopOpacity={0}   />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} vertical={false} />
+              <XAxis
+                dataKey="ts"
+                tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }}
+                tickLine={false}
+                axisLine={false}
+                interval="preserveStartEnd"
+              />
+              <YAxis
+                domain={domain}
+                tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }}
+                tickLine={false}
+                axisLine={false}
+                tickCount={4}
+              />
+              <Tooltip
+                contentStyle={{
+                  background: "hsl(var(--card))",
+                  border: "1px solid hsl(var(--border))",
+                  borderRadius: "6px",
+                  fontSize: "11px",
+                  padding: "6px 10px",
+                }}
+                labelStyle={{ color: "hsl(var(--muted-foreground))", marginBottom: 2 }}
+                itemStyle={{ color: "hsl(var(--foreground))", fontFamily: "var(--font-mono)" }}
+                formatter={(val: number) => [`${val} ${unit}`, title]}
+              />
+              <Area
+                type="monotone"
+                dataKey={dataKey}
+                stroke={color}
+                strokeWidth={1.5}
+                fill={`url(#grad-${dataKey})`}
+                dot={false}
+                isAnimationActive={false}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ParameterCard({ title, value, unit, icon: Icon, trend, min, max }: {
+  title: string;
+  value: string;
+  unit: string;
+  icon: React.ComponentType<{ className?: string }>;
+  trend?: number;
+  min?: number;
+  max?: number;
+}) {
+  return (
+    <Card className="shadow-xs border-border/60 overflow-hidden">
+      <CardContent className="p-5">
+        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
+          <Icon className="w-3.5 h-3.5" />
           {title}
         </div>
-        <div className="text-3xl font-bold text-mono tracking-tight text-foreground flex items-end gap-1">
-          {value} <span className="text-lg text-muted-foreground font-sans mb-1">{unit}</span>
+        <div className="text-3xl font-bold font-mono tracking-tight text-foreground flex items-end gap-1">
+          {value}
+          {unit && <span className="text-base text-muted-foreground font-sans mb-0.5">{unit}</span>}
         </div>
-        
+
         {(min !== undefined || max !== undefined) && (
-          <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground font-mono">
-            <span>Min: {min?.toFixed(1) || '-'}</span>
-            <span>Max: {max?.toFixed(1) || '-'}</span>
+          <div className="mt-3 flex items-center justify-between text-[11px] text-muted-foreground font-mono">
+            <span>↓ {min?.toFixed(1) ?? '—'}</span>
+            <span>↑ {max?.toFixed(1) ?? '—'}</span>
           </div>
         )}
-        
+
         {trend !== undefined && (
-          <div className="mt-4 h-1 w-full bg-secondary rounded-full overflow-hidden">
-            <div 
-              className={cn("h-full", trend > 90 ? "bg-warning" : "bg-primary")} 
-              style={{ width: `${Math.min(100, Math.max(0, trend))}%` }} 
+          <div className="mt-3 h-1 w-full bg-secondary rounded-full overflow-hidden">
+            <div
+              className={cn("h-full rounded-full transition-all duration-500", trend > 90 ? "bg-warning" : "bg-primary")}
+              style={{ width: `${Math.min(100, Math.max(0, trend))}%` }}
             />
           </div>
         )}
@@ -173,27 +335,31 @@ function ParameterCard({ title, value, unit, icon: Icon, trend, min, max }: any)
   );
 }
 
-function MetricRow({ label, value, unit }: { label: string, value: string, unit: string }) {
+function MetricRow({ label, value, unit }: { label: string; value: string; unit: string }) {
   return (
-    <div className="flex justify-between items-center py-2 border-b border-border/50 last:border-0 last:pb-0">
-      <span className="text-sm font-medium text-muted-foreground">{label}</span>
-      <span className="font-mono text-foreground font-medium">{value} <span className="text-xs opacity-70 font-sans">{unit}</span></span>
+    <div className="flex justify-between items-center py-2.5 border-b border-border/40 last:border-0 last:pb-0 first:pt-0">
+      <span className="text-sm text-muted-foreground">{label}</span>
+      <span className="font-mono text-sm text-foreground font-medium">
+        {value} <span className="text-xs text-muted-foreground font-sans">{unit}</span>
+      </span>
     </div>
   );
 }
 
-function StateIndicator({ label, state }: { label: string, state: string }) {
+function StateIndicator({ label, state }: { label: string; state: string }) {
   const isHealthy = state === "running" || state === "normal" || state === "closed";
   const isWarning = state === "starting" || state === "stopped" || state === "open";
-  
+
   return (
     <div className="flex items-center justify-between">
-      <span className="text-sm font-medium opacity-80">{label}</span>
+      <span className="text-sm text-sidebar-foreground/70">{label}</span>
       <div className={cn(
-        "px-3 py-1 rounded-full text-xs font-semibold capitalize flex items-center gap-1.5 border",
-        isHealthy ? "bg-primary/20 text-sidebar-primary-foreground border-primary/30" : 
-        isWarning ? "bg-sidebar-accent text-sidebar-accent-foreground border-sidebar-border" : 
-        "bg-destructive/20 text-destructive-foreground border-destructive/30"
+        "px-2.5 py-1 rounded text-xs font-semibold capitalize flex items-center gap-1.5 border",
+        isHealthy
+          ? "bg-primary/20 text-sidebar-primary border-primary/25"
+          : isWarning
+          ? "bg-sidebar-accent text-sidebar-accent-foreground border-sidebar-border"
+          : "bg-destructive/20 text-destructive border-destructive/25"
       )}>
         <div className={cn(
           "w-1.5 h-1.5 rounded-full",
@@ -207,13 +373,16 @@ function StateIndicator({ label, state }: { label: string, state: string }) {
 
 function MonitoringSkeleton() {
   return (
-    <div className="space-y-6">
-      <div className="h-10 w-48 bg-muted animate-pulse rounded" />
+    <div className="space-y-5">
+      <div className="h-8 w-48 bg-muted animate-pulse rounded" />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {Array(4).fill(0).map((_, i) => <Skeleton key={i} className="h-32" />)}
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-64" />)}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-44" />)}
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-48" />)}
       </div>
     </div>
   );

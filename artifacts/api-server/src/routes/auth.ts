@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { LoginBody, LoginResponse, GetCurrentUserResponse, LogoutResponse, CreateUserBody } from "@workspace/api-zod";
-import { signToken, comparePassword, hashPassword } from "../lib/auth";
+import { signToken, comparePassword, hashPassword, revokeToken } from "../lib/auth";
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -49,8 +49,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
 
 /**
  * First-run setup: create the initial administrator account.
- * Returns 403 immediately if any users already exist — subsequent
- * accounts must be created by an administrator via POST /users.
+ * Returns 403 immediately if any users already exist.
  */
 router.post("/auth/register", async (req, res): Promise<void> => {
   const [existing] = await db.select({ id: usersTable.id }).from(usersTable).limit(1);
@@ -59,7 +58,6 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     return;
   }
 
-  // Force role to administrator — the first account is always the admin
   const parsed = CreateUserBody.safeParse({ ...req.body, role: "administrator" });
   if (!parsed.success) {
     res.status(400).json({ error: "Provide a username (3–50 chars), a valid email, and a password of at least 8 characters." });
@@ -87,7 +85,11 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   }));
 });
 
-router.post("/auth/logout", requireAuth, async (_req, res): Promise<void> => {
+router.post("/auth/logout", requireAuth, async (req, res): Promise<void> => {
+  // Revoke the bearer token so it cannot be reused even before it expires
+  if (req.authToken) {
+    revokeToken(req.authToken);
+  }
   res.json(LogoutResponse.parse({ success: true, message: "Logged out successfully" }));
 });
 

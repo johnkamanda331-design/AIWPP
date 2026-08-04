@@ -1,4 +1,5 @@
 import { useGetLiveData } from "@workspace/api-client-react";
+import { ErrorState } from "@/components/error-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Activity, Power, Zap, Thermometer, Radio, ArrowRightLeft } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,10 +25,11 @@ type ChartPoint = {
 };
 
 export default function Monitoring() {
-  const { data: telemetry, isLoading } = useGetLiveData({
+  const { data: telemetry, isLoading, error, refetch } = useGetLiveData({
     query: {
       queryKey: ['/api/monitoring/live'],
       refetchInterval: 2000,
+      retry: 2,
     }
   });
 
@@ -48,7 +50,14 @@ export default function Monitoring() {
   }, [telemetry]);
 
   if (isLoading) return <MonitoringSkeleton />;
-  if (!telemetry) return null;
+  if (error || !telemetry) return (
+    <ErrorState
+      variant={error ? 'offline' : 'error'}
+      title="Telemetry unavailable"
+      message="Could not reach the monitoring service. Check that the API server is running."
+      onRetry={() => refetch()}
+    />
+  );
 
   return (
     <div className="space-y-5">

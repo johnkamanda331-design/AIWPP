@@ -1,5 +1,4 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
 import { db, settingsTable } from "@workspace/db";
 import { GetSettingsResponse, UpdateSettingsBody, UpdateSettingsResponse } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth";
@@ -48,16 +47,18 @@ router.put("/settings", requireAuth, async (req, res): Promise<void> => {
   const current = await getSettingsFromDb();
   const merged = { ...current, ...parsed.data };
 
-  // Persist each top-level key
-  for (const [key, value] of Object.entries(parsed.data)) {
-    const jsonValue = JSON.stringify(value);
-    const existing = await db.select().from(settingsTable).where(eq(settingsTable.key, key));
-    if (existing.length > 0) {
-      await db.update(settingsTable).set({ value: jsonValue }).where(eq(settingsTable.key, key));
-    } else {
-      await db.insert(settingsTable).values({ key, value: jsonValue });
-    }
-  }
+  // Atomic upsert — one statement per key, no transaction needed since each
+  // key is independent. Uses ON CONFLICT DO UPDATE to avoid the read-then-write race.
+  await Promise.all(
+    Object.entries(parsed.data).map(([key, value]) =>
+      db.insert(settingsTable)
+        .values({ key, value: JSON.stringify(value) })
+        .onConflictDoUpdate({
+          target: settingsTable.key,
+          set: { value: JSON.stringify(value) },
+        })
+    )
+  );
 
   res.json(UpdateSettingsResponse.parse(merged));
 });

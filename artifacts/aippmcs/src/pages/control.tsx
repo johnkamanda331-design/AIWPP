@@ -8,7 +8,7 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 export default function Control() {
-  const { data: telemetry, isLoading } = useGetLiveData({ query: { refetchInterval: 2000 } });
+  const { data: telemetry, isLoading } = useGetLiveData({ query: { queryKey: ['/api/monitoring/live'], refetchInterval: 2000 } });
   const sendCommand = useSendControlCommand();
   const { toast } = useToast();
   const [controlsLocked, setControlsLocked] = useState(false);

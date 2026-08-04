@@ -20,8 +20,8 @@ import {
 export default function Analytics() {
   const [period, setPeriod] = useState<"daily" | "weekly" | "monthly" | "yearly">("monthly");
   
-  const { data: energyData, isLoading: energyLoading } = useGetAnalytics({ query: { queryKey: ["analytics", period, "energy"] } });
-  const { data: runtimeData, isLoading: runtimeLoading } = useGetAnalytics({ query: { queryKey: ["analytics", period, "runtime"] } });
+  const { data: energyData, isLoading: energyLoading } = useGetAnalytics({ period, metric: 'energy' }, { query: { queryKey: ["analytics", period, "energy"] } });
+  const { data: runtimeData, isLoading: runtimeLoading } = useGetAnalytics({ period, metric: 'runtime' }, { query: { queryKey: ["analytics", period, "runtime"] } });
   const { data: insights, isLoading: insightsLoading } = useGetAnalyticsInsights();
 
   return (

@@ -8,7 +8,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Firmware() {
   const { data: firmware, isLoading, refetch } = useGetFirmwareInfo({
-    query: { refetchInterval: (data) => data?.updateInProgress ? 2000 : false }
+    query: {
+      queryKey: ['/api/firmware/info'],
+      refetchInterval: (query) => query.state.data?.updateInProgress ? 2000 : false,
+    }
   });
   const triggerUpdate = useTriggerFirmwareUpdate();
   const { toast } = useToast();

@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 export default function Energy() {
-  const { data: energy, isLoading } = useGetEnergyData({ query: { queryKey: ["energy", "month"] } });
+  const { data: energy, isLoading } = useGetEnergyData({ period: 'month' }, { query: { queryKey: ["energy", "month"] } });
 
   if (isLoading) return <EnergySkeleton />;
   if (!energy) return null;

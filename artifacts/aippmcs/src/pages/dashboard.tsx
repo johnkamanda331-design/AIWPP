@@ -6,11 +6,12 @@ import { Activity, AlertTriangle, Zap, Clock, ShieldAlert, Cpu, CheckCircle2, Ar
 import { Link } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { Button } from "react-day-picker";
+import { Button } from "@/components/ui/button";
 
 export default function Dashboard() {
   const { data: summary, isLoading } = useGetDashboardSummary({
     query: {
+      queryKey: ['/api/dashboard/summary'],
       refetchInterval: 5000,
     }
   });

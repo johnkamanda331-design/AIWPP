@@ -12,11 +12,17 @@ export default function Events() {
   const [search, setSearch] = useState("");
   const [severity, setSeverity] = useState<string>("all");
   
-  const { data, isLoading } = useGetEvents({
-    query: {
-      queryKey: ["events", search, severity],
+  const { data, isLoading } = useGetEvents(
+    {
+      search: search || undefined,
+      severity: severity !== 'all' ? (severity as any) : undefined,
+    },
+    {
+      query: {
+        queryKey: ["events", search, severity],
+      }
     }
-  });
+  );
 
   const getIcon = (sev: EventSeverity) => {
     switch(sev) {

@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 export default function Monitoring() {
   const { data: telemetry, isLoading } = useGetLiveData({
     query: {
+      queryKey: ['/api/monitoring/live'],
       refetchInterval: 2000,
     }
   });

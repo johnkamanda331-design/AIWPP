@@ -31,7 +31,8 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
   // Simulated live controller data (would come from MQTT/hardware in production)
   const runtime = 4.2 + Math.random() * 0.1;
   const energy = runtime * 0.75;
-  const cost = energy * 0.18;
+  // EPRA Kenya 2024 SC-11 tariff: effective rate KSh 24.80/kWh (incl. FCC, FERFA, IAF, levies, VAT 16%)
+  const cost = energy * 24.80;
 
   const now = new Date();
   const nextStart = new Date(now.getTime() + 3 * 60 * 60 * 1000);

@@ -15,7 +15,8 @@ router.get("/energy", requireAuth, async (req, res): Promise<void> => {
   const days = period === "day" ? 1 : period === "week" ? 7 : period === "month" ? 30 : 365;
 
   const totalConsumption = parseFloat((days * 3.92 * (1 + (Math.random() - 0.5) * 0.1)).toFixed(2));
-  const electricityRate = 0.18;
+  // EPRA Kenya 2024 SC-11 tariff: effective rate KSh 24.80/kWh (incl. FCC, FERFA, IAF, levies, VAT 16%)
+  const electricityRate = 24.80;
   const estimatedCost = parseFloat((totalConsumption * electricityRate).toFixed(2));
 
   const dailyBreakdown = Array.from({ length: Math.min(days, 30) }, (_, i) => {

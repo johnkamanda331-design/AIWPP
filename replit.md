@@ -1,47 +1,51 @@
-# Mtiririko — AIPPMCS Dashboard
+# AIPPMCS — Adaptive Intelligent Water Pump Protection, Monitoring and Control System
 
-Industrial-grade web dashboard for real-time monitoring, control, fault detection, and energy management of an ESP32-based water pump controller.
-
-## Run & Operate
-
-- **Frontend** (workflow `artifacts/aippmcs: web`): `PORT=22559 pnpm --filter @workspace/aippmcs run dev`
-  - Must set `PORT=22559` — artifact.toml routes the preview proxy to that port
-- **API server** (workflow `artifacts/api-server: API Server`): `pnpm --filter @workspace/api-server run dev`
-- `pnpm run typecheck` — full typecheck across all packages (requires codegen first)
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+A production-quality industrial web dashboard for real-time monitoring, control, fault detection, adaptive learning, scheduling, analytics, and energy management of ESP32-based pump controllers.
 
 ## Stack
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- **Frontend**: React + Vite + Tailwind CSS + shadcn/ui (`artifacts/aippmcs`)
+- **API Server**: Express 5 + Drizzle ORM (`artifacts/api-server`)
+- **Database**: Neon PostgreSQL (via `DATABASE_URL` secret)
+- **Auth**: JWT (signed with `SESSION_SECRET`), role-based (administrator / technician / maintenance / viewer)
+- **Shared libs**: `lib/api-spec` (OpenAPI), `lib/api-client-react` (generated React Query hooks), `lib/api-zod` (Zod schemas), `lib/db` (Drizzle schema + client)
 
-## Where things live
+## How to run
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+Two workflows start automatically:
 
-## Architecture decisions
+| Workflow | Command | Port |
+|---|---|---|
+| `artifacts/aippmcs: web` | `pnpm --filter @workspace/aippmcs run dev` | 22559 |
+| `API Server` | `pnpm --filter @workspace/api-server run dev` | 8080 |
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+The frontend proxies all `/api/*` requests to the API server (configured in `artifacts/aippmcs/vite.config.ts`).
 
-## Product
+## Required secrets
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+| Secret | Description |
+|---|---|
+| `DATABASE_URL` | Neon PostgreSQL connection string |
+| `SESSION_SECRET` | JWT signing secret |
+
+## First-time setup
+
+On a fresh database, visit `/login` and use the **Register** flow — the first account is automatically created as administrator. Subsequent accounts must be created by an administrator via the Users page or `POST /api/users`.
+
+## Database
+
+Schema managed with Drizzle ORM. To push schema changes:
+
+```bash
+cd lib/db && DATABASE_URL=$DATABASE_URL pnpm exec drizzle-kit push
+```
+
+Tables: `users`, `events`, `faults`, `schedules`, `notifications`, `settings`, `control_commands`
+
+## Pages
+
+Dashboard · Live Monitoring · Remote Control · Scheduler · Fault Detection · Event Timeline · Analytics · Electrical Signature · Adaptive Learning · Energy Management · Health Score · Notifications · Device Settings · OTA Firmware · User Management · Reports
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
-
-## Gotchas
-
-_Populate as you build — sharp edges, "always run X before Y" rules._
-
-## Pointers
-
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- Keep the project's existing structure and stack — do not restructure or migrate it.

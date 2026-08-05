@@ -20,8 +20,8 @@ router.post("/reports/generate", requireAuth, async (req, res): Promise<void> =>
   const reportId = randomUUID();
   reportStore.set(reportId, {
     type:          parsed.data.type,
-    from:          parsed.data.from,
-    to:            parsed.data.to,
+    from:          parsed.data.from instanceof Date ? parsed.data.from.toISOString().slice(0, 10) : String(parsed.data.from),
+    to:            parsed.data.to instanceof Date ? parsed.data.to.toISOString().slice(0, 10) : String(parsed.data.to),
     format:        parsed.data.format ?? "pdf",
     includeCharts: parsed.data.includeCharts ?? true,
   });

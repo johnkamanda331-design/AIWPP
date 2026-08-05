@@ -32,7 +32,7 @@ export default function Dashboard() {
   if (!summary) return null;
 
   const isNormal   = summary.systemStatus === "normal";
-  const isCritical = summary.systemStatus === "critical";
+  const isCritical = summary.systemStatus === "fault";
   const isWarning  = summary.systemStatus === "warning";
 
   const healthColor =

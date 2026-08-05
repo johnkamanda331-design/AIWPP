@@ -22,7 +22,7 @@ args = "artifacts/aippmcs: web"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "API Server"
+args = "artifacts/api-server: API Server"
 
 [[workflows.workflow]]
 name = "artifacts/aippmcs: web"
@@ -37,16 +37,16 @@ args = "PORT=22559 pnpm --filter @workspace/aippmcs run dev"
 waitForPort = 22559
 
 [[workflows.workflow]]
-name = "API Server"
+name = "artifacts/api-server: API Server"
 author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "PORT=8080 DATABASE_URL=$DATABASE_URL SESSION_SECRET=$SESSION_SECRET pnpm --filter @workspace/api-server run dev"
-waitForPort = 8080
 
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "PORT=8080 DATABASE_URL=$DATABASE_URL NEON_DATABASE_URL=$NEON_DATABASE_URL SESSION_SECRET=$SESSION_SECRET pnpm --filter @workspace/api-server run dev"
+waitForPort = 8080
 
 [agent]
 stack = "PNPM_WORKSPACE"

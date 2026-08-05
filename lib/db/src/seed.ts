@@ -38,11 +38,6 @@ function minutesAgo(m: number): Date {
   return new Date(Date.now() - m * 60_000);
 }
 
-/** sha-256 hex — matches the hash used in auth.ts */
-function hashPassword(pw: string): string {
-  return crypto.createHash("sha256").update(pw).digest("hex");
-}
-
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 async function seed() {

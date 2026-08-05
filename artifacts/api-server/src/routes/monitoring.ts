@@ -137,4 +137,63 @@ router.get("/monitoring/history", requireAuth, async (req, res): Promise<void> =
   res.json(GetMonitoringHistoryResponse.parse(points));
 });
 
+// ── Server-Sent Events stream ─────────────────────────────────────────────────
+// Streams a live telemetry snapshot every 2 s over a persistent HTTP connection.
+// Requires Bearer auth — the client must send the JWT in the Authorization header
+// (use fetch() + ReadableStream instead of native EventSource, which can't set headers).
+router.get("/monitoring/stream", requireAuth, (req, res): void => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no"); // Disable nginx/Vite proxy buffering
+
+  // Flush headers immediately so the client knows the stream is open
+  res.flushHeaders();
+
+  const writeTelemetry = () => {
+    const data = generateTelemetry();
+    try {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    } catch {
+      // Client disconnected mid-write; cleanup happens via "close" event
+      return;
+    }
+
+    // Persist asynchronously — non-fatal
+    db.insert(telemetryTable).values({
+      timestamp: new Date(data.timestamp),
+      voltage: data.voltage,
+      current: data.current,
+      frequency: data.frequency,
+      realPower: data.realPower,
+      reactivePower: data.reactivePower,
+      apparentPower: data.apparentPower,
+      powerFactor: data.powerFactor,
+      energy: data.energy,
+      runtime: data.runtime,
+      internalTemp: data.internalTemp,
+      communicationQuality: data.communicationQuality,
+      motorState: data.motorState,
+      supplyState: data.supplyState,
+      relayState: data.relayState,
+    }).catch((err: Error) => {
+      req.log.warn({ err: err.message }, "Failed to persist telemetry (stream)");
+    });
+  };
+
+  // Emit first point immediately so the UI doesn't wait 2 s
+  writeTelemetry();
+  const dataInterval = setInterval(writeTelemetry, 2000);
+
+  // Keep-alive comment every 30 s to prevent proxy/LB idle timeouts
+  const pingInterval = setInterval(() => {
+    try { res.write(": ping\n\n"); } catch { /* ignore */ }
+  }, 30_000);
+
+  req.on("close", () => {
+    clearInterval(dataInterval);
+    clearInterval(pingInterval);
+  });
+});
+
 export default router;

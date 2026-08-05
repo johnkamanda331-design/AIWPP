@@ -1,4 +1,4 @@
-import { useGetLiveData } from "@workspace/api-client-react";
+import type { LiveTelemetry } from "@workspace/api-client-react";
 import { ErrorState } from "@/components/error-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Activity, Power, Zap, Thermometer, Radio, ArrowRightLeft } from "lucide-react";
@@ -16,6 +16,7 @@ import {
 } from "recharts";
 
 const MAX_POINTS = 40;
+const TOKEN_KEY = "mtiririko_auth";
 
 type ChartPoint = {
   ts: string;
@@ -24,14 +25,74 @@ type ChartPoint = {
   power: number;
 };
 
-export default function Monitoring() {
-  const { data: telemetry, isLoading, error, refetch } = useGetLiveData({
-    query: {
-      queryKey: ['/api/monitoring/live'],
-      refetchInterval: 2000,
-      retry: 2,
+// ── Fetch-based SSE hook ─────────────────────────────────────────────────────
+// Uses fetch() + ReadableStream so we can send the Authorization header
+// (native EventSource does not support custom headers).
+function useTelemetryStream() {
+  const [data, setData]           = useState<LiveTelemetry | null>(null);
+  const [isConnected, setConnected] = useState(false);
+  const [error, setError]         = useState<Error | null>(null);
+  const [retryKey, setRetryKey]   = useState(0);
+  const backoffRef                = useRef(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let retryTimer: ReturnType<typeof setTimeout>;
+
+    async function connect() {
+      const token = localStorage.getItem(TOKEN_KEY);
+      if (!token) { setError(new Error("Not authenticated")); return; }
+
+      try {
+        const response = await fetch("/api/monitoring/stream", {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!response.body) throw new Error("No stream body");
+
+        setConnected(true);
+        setError(null);
+        backoffRef.current = 0;
+
+        const reader  = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer    = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer      = lines.pop() ?? "";
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              try { setData(JSON.parse(line.slice(6)) as LiveTelemetry); } catch { /* skip */ }
+            }
+          }
+        }
+        throw new Error("Stream closed"); // reconnect on clean close
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        setConnected(false);
+        setError(err instanceof Error ? err : new Error("Stream error"));
+        const delay = Math.min(1_000 * 2 ** backoffRef.current, 30_000);
+        backoffRef.current++;
+        retryTimer = setTimeout(connect, delay);
+      }
     }
-  });
+
+    connect();
+    return () => { controller.abort(); clearTimeout(retryTimer); };
+  }, [retryKey]);
+
+  const reconnect = () => { backoffRef.current = 0; setRetryKey(k => k + 1); };
+  return { data, isConnected, error, reconnect };
+}
+
+export default function Monitoring() {
+  const { data: telemetry, isConnected, error, reconnect } = useTelemetryStream();
+  const isLoading = telemetry === null && !error;
 
   const bufferRef = useRef<ChartPoint[]>([]);
   const [chartData, setChartData] = useState<ChartPoint[]>([]);
@@ -50,25 +111,34 @@ export default function Monitoring() {
   }, [telemetry]);
 
   if (isLoading) return <MonitoringSkeleton />;
-  if (error || !telemetry) return (
+  if (error && !telemetry) return (
     <ErrorState
-      variant={error ? 'offline' : 'error'}
-      title="Telemetry unavailable"
-      message="Could not reach the monitoring service. Check that the API server is running."
-      onRetry={() => refetch()}
+      variant="offline"
+      title="Telemetry stream unavailable"
+      message="Could not connect to the live data stream. Retrying automatically."
+      onRetry={reconnect}
     />
   );
+  if (!telemetry) return null;
 
   return (
     <div className="space-y-5">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <p className="text-sm text-muted-foreground mt-0.5">Real-time electrical telemetry · 2 s refresh</p>
+          <p className="text-sm text-muted-foreground mt-0.5">Real-time electrical telemetry · live stream</p>
         </div>
-        <div className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 bg-primary/8 text-primary border border-primary/20 rounded">
-          <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-          Live
+        <div className={cn(
+          "flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 border rounded",
+          isConnected
+            ? "bg-primary/8 text-primary border-primary/20"
+            : "bg-muted text-muted-foreground border-border/60"
+        )}>
+          <div className={cn(
+            "w-1.5 h-1.5 rounded-full",
+            isConnected ? "bg-primary animate-pulse" : "bg-muted-foreground"
+          )} />
+          {isConnected ? "Live" : "Reconnecting…"}
         </div>
       </div>
 

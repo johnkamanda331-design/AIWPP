@@ -1,4 +1,5 @@
 import { useGetDashboardSummary } from "@workspace/api-client-react";
+import { ErrorState } from "@/components/error-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -21,15 +22,23 @@ import { Button } from "@/components/ui/button";
 import { formatKSh, wifiLabel } from "@/lib/epra-tariff";
 
 export default function Dashboard() {
-  const { data: summary, isLoading } = useGetDashboardSummary({
+  const { data: summary, isLoading, error, refetch } = useGetDashboardSummary({
     query: {
       queryKey: ['/api/dashboard/summary'],
       refetchInterval: 5000,
+      retry: 2,
     }
   });
 
   if (isLoading) return <DashboardSkeleton />;
-  if (!summary) return null;
+  if (error || !summary) return (
+    <ErrorState
+      variant="offline"
+      title="Dashboard unavailable"
+      message="Could not load system data. Check that the API server is running and try again."
+      onRetry={() => refetch()}
+    />
+  );
 
   const isNormal   = summary.systemStatus === "normal";
   const isCritical = summary.systemStatus === "fault";

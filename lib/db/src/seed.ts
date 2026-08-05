@@ -1,11 +1,11 @@
 /**
- * Seed script — populates the database with realistic demo data so the app
- * has something meaningful to display on first load.
+ * Seed script — populates the database with 30 days of realistic demo data.
  *
  * Usage:  pnpm --filter @workspace/db run seed
  *
- * Safe to run multiple times: existing rows are detected and skipped where
- * possible; tables are cleared and re-seeded if a --force flag is passed.
+ * Telemetry, events, faults, and notifications are always cleared and
+ * re-seeded so that the volume and date ranges stay fresh.
+ * Users, settings, and schedules are upserted (skipped if they already exist).
  */
 
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -13,7 +13,6 @@ import pg from "pg";
 import bcrypt from "bcryptjs";
 import * as schema from "./schema";
 import { eq } from "drizzle-orm";
-
 
 const { Pool } = pg;
 
@@ -37,13 +36,40 @@ function daysAgo(d: number): Date {
 function minutesAgo(m: number): Date {
   return new Date(Date.now() - m * 60_000);
 }
+function rand(base: number, spread: number): number {
+  return base + (Math.random() - 0.5) * 2 * spread;
+}
+
+/** True if hour:minute falls within [startH:startM, endH:endM) */
+function inWindow(h: number, m: number, startH: number, startM: number, endH: number, endM: number): boolean {
+  const t = h * 60 + m;
+  const s = startH * 60 + startM;
+  const e = endH * 60 + endM;
+  return t >= s && t < e;
+}
+
+function isPumpRunning(ts: Date): boolean {
+  const h = ts.getHours();
+  const m = ts.getMinutes();
+  const dow = ts.getDay(); // 0=Sun, 6=Sat
+  const isWeekend = dow === 0 || dow === 6;
+
+  // Morning run: 06:00–09:00 every day
+  if (inWindow(h, m, 6, 0, 9, 0)) return true;
+  // Evening fill: 17:30–20:00 weekdays only
+  if (!isWeekend && inWindow(h, m, 17, 30, 20, 0)) return true;
+  // Weekend deep fill: 08:00–12:00
+  if (isWeekend && inWindow(h, m, 8, 0, 12, 0)) return true;
+
+  return false;
+}
 
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 async function seed() {
   console.log("🌱  Starting database seed…\n");
 
-  // ── 1. Users — insert demo accounts by username if they don't exist ───────
+  // ── 1. Users ─────────────────────────────────────────────────────────────
   const DEMO_USERS = [
     { username: "admin",   email: "admin@mtiririko.io",  pw: "Admin@1234",  role: "administrator", lastLogin: minutesAgo(15) },
     { username: "tech1",   email: "tech@mtiririko.io",   pw: "Tech@1234",   role: "technician",    lastLogin: hoursAgo(2)   },
@@ -53,33 +79,27 @@ async function seed() {
 
   let usersCreated = 0;
   for (const demo of DEMO_USERS) {
-    const existing = await db
-      .select({ id: schema.usersTable.id })
-      .from(schema.usersTable)
+    const passwordHash = await bcrypt.hash(demo.pw, 10);
+    const existing = await db.select({ id: schema.usersTable.id }).from(schema.usersTable)
       .where(eq(schema.usersTable.username, demo.username));
-
     if (existing.length === 0) {
-      const passwordHash = await bcrypt.hash(demo.pw, 10);
       await db.insert(schema.usersTable).values({
-        username: demo.username,
-        email: demo.email,
-        passwordHash,
-        role: demo.role,
-        isActive: true,
-        mfaEnabled: false,
-        lastLogin: demo.lastLogin,
+        username: demo.username, email: demo.email, passwordHash,
+        role: demo.role, isActive: true, mfaEnabled: false, lastLogin: demo.lastLogin,
       });
       usersCreated++;
       console.log(`     ✓  Created user: ${demo.username} (${demo.role})`);
     } else {
-      console.log(`  ↳  User '${demo.username}' already exists — skipping`);
+      // Always refresh password hash so demo credentials are reliable after any re-seed
+      await db.update(schema.usersTable)
+        .set({ passwordHash, isActive: true, lastLogin: demo.lastLogin })
+        .where(eq(schema.usersTable.username, demo.username));
+      console.log(`  ↳  User '${demo.username}' refreshed password`);
     }
   }
-  if (usersCreated === 0) {
-    console.log("  ↳  All demo users already exist");
-  }
+  if (usersCreated === 0) console.log("  ↳  All demo users updated");
 
-  // ── 2. Settings ───────────────────────────────────────────────────────────
+  // ── 2. Settings ──────────────────────────────────────────────────────────
   const settingDefaults: Array<{ key: string; value: string }> = [
     { key: "system.name",               value: JSON.stringify("Mtiririko Pump Station #1") },
     { key: "system.location",           value: JSON.stringify("Nairobi, Kenya") },
@@ -99,248 +119,268 @@ async function seed() {
     { key: "firmware.currentVersion",   value: JSON.stringify("v2.4.1") },
     { key: "firmware.latestVersion",    value: JSON.stringify("v2.4.1") },
   ];
-
   for (const s of settingDefaults) {
-    const existing = await db.select({ id: schema.settingsTable.id })
-      .from(schema.settingsTable)
+    const existing = await db.select({ id: schema.settingsTable.id }).from(schema.settingsTable)
       .where(eq(schema.settingsTable.key, s.key));
-    if (existing.length === 0) {
-      await db.insert(schema.settingsTable).values(s);
-    }
+    if (existing.length === 0) await db.insert(schema.settingsTable).values(s);
   }
   console.log(`  ↳  ✓  ${settingDefaults.length} settings ensured`);
 
-  // ── 3. Schedules ──────────────────────────────────────────────────────────
+  // ── 3. Schedules ─────────────────────────────────────────────────────────
   const existingSchedules = await db.select({ id: schema.schedulesTable.id }).from(schema.schedulesTable);
   if (existingSchedules.length === 0) {
     await db.insert(schema.schedulesTable).values([
-      {
-        name: "Morning Run",
-        type: "daily",
-        startTime: "06:00",
-        endTime: "09:00",
-        days: JSON.stringify([1, 2, 3, 4, 5, 6, 0]),
-        isActive: true,
-        priority: 1,
-      },
-      {
-        name: "Evening Fill",
-        type: "daily",
-        startTime: "17:30",
-        endTime: "20:00",
-        days: JSON.stringify([1, 2, 3, 4, 5]),
-        isActive: true,
-        priority: 1,
-      },
-      {
-        name: "Weekend Deep Fill",
-        type: "weekly",
-        startTime: "08:00",
-        endTime: "12:00",
-        days: JSON.stringify([6, 0]),
-        isActive: true,
-        priority: 2,
-      },
+      { name: "Morning Run",       type: "daily",  startTime: "06:00", endTime: "09:00", days: JSON.stringify([0,1,2,3,4,5,6]), isActive: true, priority: 1 },
+      { name: "Evening Fill",      type: "daily",  startTime: "17:30", endTime: "20:00", days: JSON.stringify([1,2,3,4,5]),     isActive: true, priority: 1 },
+      { name: "Weekend Deep Fill", type: "weekly", startTime: "08:00", endTime: "12:00", days: JSON.stringify([6,0]),           isActive: true, priority: 2 },
     ]);
     console.log("  ↳  ✓  3 schedules created");
   } else {
     console.log(`  ↳  Schedules already exist (${existingSchedules.length}) — skipping`);
   }
 
-  // ── 4. Faults ─────────────────────────────────────────────────────────────
-  const existingFaults = await db.select({ id: schema.faultsTable.id }).from(schema.faultsTable);
-  if (existingFaults.length === 0) {
-    await db.insert(schema.faultsTable).values([
-      {
-        type: "under_voltage",
-        severity: "medium",
-        cause: "Supply voltage dropped to 208 V during peak-load period",
-        recommendedAction: "Check incoming supply from utility; inspect cable connections",
-        occurrences: 3,
-        confidence: 91,
-        trend: "stable",
-        isActive: true,
-        firstSeen: daysAgo(4),
-        lastSeen: hoursAgo(6),
-        description: "Supply voltage below minimum threshold (200 V)",
-      },
-      {
-        type: "high_temperature",
-        severity: "low",
-        cause: "Controller enclosure ventilation partially obstructed",
-        recommendedAction: "Clear ventilation slots; check ambient temperature",
-        occurrences: 1,
-        confidence: 75,
-        trend: "stable",
-        isActive: false,
-        firstSeen: daysAgo(10),
-        lastSeen: daysAgo(8),
-        description: "Internal temperature exceeded 55 °C briefly",
-      },
-      {
-        type: "communication_loss",
-        severity: "high",
-        cause: "MQTT broker unreachable for 47 s — likely WiFi dropout",
-        recommendedAction: "Check router connectivity; verify WiFi signal strength",
-        occurrences: 2,
-        confidence: 88,
-        trend: "decreasing",
-        isActive: false,
-        firstSeen: daysAgo(2),
-        lastSeen: hoursAgo(18),
-        description: "Remote communication interrupted",
-      },
-    ]);
-    console.log("  ↳  ✓  3 faults created");
-  } else {
-    console.log(`  ↳  Faults already exist (${existingFaults.length}) — skipping`);
-  }
+  // ── 4. Faults — clear and re-seed ────────────────────────────────────────
+  await db.delete(schema.faultsTable);
+  await db.insert(schema.faultsTable).values([
+    {
+      type: "under_voltage", severity: "medium",
+      cause: "Supply voltage dropped to 208 V during peak-load period",
+      recommendedAction: "Check incoming supply from utility; inspect cable connections",
+      occurrences: 7, confidence: 91, trend: "stable", isActive: true,
+      firstSeen: daysAgo(14), lastSeen: hoursAgo(6),
+      description: "Supply voltage below minimum threshold (200 V)",
+    },
+    {
+      type: "high_temperature", severity: "low",
+      cause: "Controller enclosure ventilation partially obstructed",
+      recommendedAction: "Clear ventilation slots; check ambient temperature",
+      occurrences: 2, confidence: 75, trend: "stable", isActive: false,
+      firstSeen: daysAgo(22), lastSeen: daysAgo(20),
+      description: "Internal temperature exceeded 55 °C briefly",
+    },
+    {
+      type: "communication_loss", severity: "high",
+      cause: "MQTT broker unreachable for 47 s — likely WiFi dropout",
+      recommendedAction: "Check router connectivity; verify WiFi signal strength at controller",
+      occurrences: 4, confidence: 88, trend: "decreasing", isActive: false,
+      firstSeen: daysAgo(10), lastSeen: hoursAgo(18),
+      description: "Remote communication interrupted",
+    },
+    {
+      type: "dry_run_detected", severity: "critical",
+      cause: "Current below 1 A while relay closed — possible dry run or pump cavitation",
+      recommendedAction: "Check water level in source tank; inspect foot valve and strainer",
+      occurrences: 1, confidence: 95, trend: "stable", isActive: false,
+      firstSeen: daysAgo(18), lastSeen: daysAgo(18),
+      description: "Dry run protection triggered — pump stopped automatically",
+    },
+    {
+      type: "over_current", severity: "high",
+      cause: "Motor current reached 11.2 A — possible mechanical obstruction",
+      recommendedAction: "Inspect pump impeller for debris; check bearings",
+      occurrences: 2, confidence: 82, trend: "decreasing", isActive: false,
+      firstSeen: daysAgo(25), lastSeen: daysAgo(21),
+      description: "Current exceeded rated limit of 9.8 A",
+    },
+    {
+      type: "power_factor_low", severity: "low",
+      cause: "Power factor dipped to 0.74 — possible capacitor bank degradation",
+      recommendedAction: "Test run capacitor bank; consider replacement if PF remains below 0.80",
+      occurrences: 3, confidence: 70, trend: "stable", isActive: true,
+      firstSeen: daysAgo(7), lastSeen: hoursAgo(2),
+      description: "Power factor below acceptable threshold of 0.80",
+    },
+  ]);
+  console.log("  ↳  ✓  6 faults created");
 
-  // ── 5. Events ─────────────────────────────────────────────────────────────
-  const existingEvents = await db.select({ id: schema.eventsTable.id }).from(schema.eventsTable);
-  if (existingEvents.length === 0) {
-    await db.insert(schema.eventsTable).values([
-      {
-        type: "pump_started",
-        description: "Pump started — scheduled morning run",
-        severity: "info",
-        details: JSON.stringify({ trigger: "schedule", schedule: "Morning Run" }),
-        timestamp: hoursAgo(1),
-      },
-      {
-        type: "voltage_low",
-        description: "Supply voltage dropped to 208 V",
-        severity: "medium",
-        details: JSON.stringify({ voltage: 208, threshold: 210 }),
-        timestamp: hoursAgo(6),
-      },
-      {
-        type: "pump_stopped",
-        description: "Pump stopped — scheduled stop",
-        severity: "info",
-        details: JSON.stringify({ trigger: "schedule", schedule: "Morning Run" }),
-        timestamp: hoursAgo(7),
-      },
-      {
-        type: "communication_restored",
-        description: "MQTT connection restored after 47 s dropout",
-        severity: "info",
-        details: JSON.stringify({ downtime_s: 47 }),
-        timestamp: hoursAgo(18),
-      },
-      {
-        type: "pump_started",
-        description: "Pump started — evening fill",
-        severity: "info",
-        details: JSON.stringify({ trigger: "schedule", schedule: "Evening Fill" }),
-        timestamp: hoursAgo(24),
-      },
-      {
-        type: "fault_cleared",
-        description: "High temperature fault auto-cleared — temp normalized",
-        severity: "info",
-        details: JSON.stringify({ fault_type: "high_temperature", temp: 49.2 }),
-        timestamp: daysAgo(8),
-      },
-      {
-        type: "user_login",
-        description: "Admin signed in",
-        severity: "info",
-        details: JSON.stringify({ username: "admin", role: "administrator" }),
-        timestamp: minutesAgo(15),
-      },
-    ]);
-    console.log("  ↳  ✓  7 events created");
-  } else {
-    console.log(`  ↳  Events already exist (${existingEvents.length}) — skipping`);
-  }
+  // ── 5. Events — clear and re-seed with 30 days of history ────────────────
+  await db.delete(schema.eventsTable);
 
-  // ── 6. Notifications ──────────────────────────────────────────────────────
-  const existingNotifs = await db.select({ id: schema.notificationsTable.id }).from(schema.notificationsTable);
-  if (existingNotifs.length === 0) {
-    await db.insert(schema.notificationsTable).values([
-      {
-        type: "fault_active",
-        severity: "medium",
-        message: "Under-voltage fault is active — supply voltage below threshold",
-        isRead: false,
-        details: JSON.stringify({ fault_type: "under_voltage", occurrences: 3 }),
-        timestamp: hoursAgo(6),
-      },
-      {
-        type: "schedule_run",
-        severity: "info",
-        message: "Morning Run schedule completed — 3.0 h runtime, 2.25 kWh",
-        isRead: true,
-        details: JSON.stringify({ schedule: "Morning Run", runtime_h: 3, energy_kwh: 2.25 }),
-        timestamp: hoursAgo(7),
-      },
-      {
-        type: "communication_restored",
-        severity: "info",
-        message: "MQTT connection restored after brief dropout",
-        isRead: true,
-        details: null,
-        timestamp: hoursAgo(18),
-      },
-    ]);
-    console.log("  ↳  ✓  3 notifications created");
-  } else {
-    console.log(`  ↳  Notifications already exist (${existingNotifs.length}) — skipping`);
-  }
+  const events: Array<schema.InsertEvent> = [];
 
-  // ── 7. Telemetry — 24 h of hourly samples ──────────────────────────────
-  const existingTel = await db.select({ id: schema.telemetryTable.id }).from(schema.telemetryTable);
-  if (existingTel.length === 0) {
-    console.log("  ↳  Inserting 24 h of telemetry samples…");
+  // Recurring daily events: pump starts / stops for each schedule window
+  for (let day = 29; day >= 0; day--) {
+    const base = daysAgo(day);
+    const dow = base.getDay();
+    const isWeekend = dow === 0 || dow === 6;
 
-    const rows: schema.InsertTelemetry[] = [];
-    let accEnergy = 0;
-    let accRuntime = 0;
+    // Morning run start
+    const morningStart = new Date(base); morningStart.setHours(6, 0, 30, 0);
+    events.push({ type: "pump_started", description: "Pump started — Morning Run schedule", severity: "info",
+      details: JSON.stringify({ trigger: "schedule", schedule: "Morning Run" }), timestamp: morningStart });
 
-    for (let h = 23; h >= 0; h--) {
-      const ts = hoursAgo(h);
-      // Pump runs during scheduled windows: 06–09 and 17:30–20
-      const hour = ts.getHours();
-      const isRunning = (hour >= 6 && hour < 9) || (hour >= 17 && hour < 20);
+    // Morning run stop
+    const morningStop = new Date(base); morningStop.setHours(9, 0, 15, 0);
+    const morningRuntime = 3.0 + rand(0, 0.02);
+    const morningEnergy  = parseFloat((morningRuntime * 0.895).toFixed(3));
+    events.push({ type: "pump_stopped", description: "Pump stopped — Morning Run complete", severity: "info",
+      details: JSON.stringify({ trigger: "schedule", schedule: "Morning Run", runtime_h: morningRuntime, energy_kwh: morningEnergy }), timestamp: morningStop });
 
-      const voltage = 230 + (Math.random() * 10 - 5);
-      const current = isRunning ? 9.2 + (Math.random() * 0.8 - 0.4) : 0.05;
-      const frequency = 50 + (Math.random() * 0.4 - 0.2);
-      const pf = isRunning ? 0.88 + Math.random() * 0.04 : 0.1;
-      const realPower = voltage * current * pf;
-      const apparentPower = voltage * current;
-      const reactivePower = Math.sqrt(Math.max(0, apparentPower ** 2 - realPower ** 2));
+    // Evening fill (weekdays)
+    if (!isWeekend) {
+      const eveningStart = new Date(base); eveningStart.setHours(17, 30, 10, 0);
+      events.push({ type: "pump_started", description: "Pump started — Evening Fill schedule", severity: "info",
+        details: JSON.stringify({ trigger: "schedule", schedule: "Evening Fill" }), timestamp: eveningStart });
 
-      if (isRunning) {
-        accRuntime += 1;
-        accEnergy  += realPower / 1000; // kWh per hour
-      }
-
-      rows.push({
-        timestamp: ts,
-        voltage: parseFloat(voltage.toFixed(1)),
-        current: parseFloat(current.toFixed(2)),
-        frequency: parseFloat(frequency.toFixed(2)),
-        realPower: parseFloat(realPower.toFixed(1)),
-        reactivePower: parseFloat(reactivePower.toFixed(1)),
-        apparentPower: parseFloat(apparentPower.toFixed(1)),
-        powerFactor: parseFloat(pf.toFixed(3)),
-        energy: parseFloat(accEnergy.toFixed(3)),
-        runtime: parseFloat(accRuntime.toFixed(2)),
-        internalTemp: parseFloat((38 + Math.random() * 4).toFixed(1)),
-        communicationQuality: parseFloat((52 + Math.random() * 8).toFixed(1)),
-        motorState: isRunning ? "running" : "stopped",
-        supplyState: "normal",
-        relayState: isRunning ? "closed" : "open",
-      });
+      const eveningStop = new Date(base); eveningStop.setHours(20, 0, 20, 0);
+      const eveningRuntime = 2.5 + rand(0, 0.02);
+      const eveningEnergy  = parseFloat((eveningRuntime * 0.895).toFixed(3));
+      events.push({ type: "pump_stopped", description: "Pump stopped — Evening Fill complete", severity: "info",
+        details: JSON.stringify({ trigger: "schedule", schedule: "Evening Fill", runtime_h: eveningRuntime, energy_kwh: eveningEnergy }), timestamp: eveningStop });
     }
 
-    await db.insert(schema.telemetryTable).values(rows);
-    console.log(`     ✓  ${rows.length} telemetry rows created`);
-  } else {
-    console.log(`  ↳  Telemetry already exists (${existingTel.length} rows) — skipping`);
+    // Weekend deep fill
+    if (isWeekend) {
+      const wkStart = new Date(base); wkStart.setHours(8, 0, 5, 0);
+      events.push({ type: "pump_started", description: "Pump started — Weekend Deep Fill schedule", severity: "info",
+        details: JSON.stringify({ trigger: "schedule", schedule: "Weekend Deep Fill" }), timestamp: wkStart });
+
+      const wkStop = new Date(base); wkStop.setHours(12, 0, 10, 0);
+      const wkRuntime = 4.0 + rand(0, 0.03);
+      const wkEnergy  = parseFloat((wkRuntime * 0.895).toFixed(3));
+      events.push({ type: "pump_stopped", description: "Pump stopped — Weekend Deep Fill complete", severity: "info",
+        details: JSON.stringify({ trigger: "schedule", schedule: "Weekend Deep Fill", runtime_h: wkRuntime, energy_kwh: wkEnergy }), timestamp: wkStop });
+    }
   }
+
+  // Fault-related events at specific days
+  const faultEvents: Array<schema.InsertEvent> = [
+    { type: "fault_detected",    description: "Dry run protection triggered — pump halted automatically", severity: "critical",
+      details: JSON.stringify({ fault_type: "dry_run_detected", current: 0.8 }),      timestamp: daysAgo(18) },
+    { type: "fault_cleared",     description: "Dry run fault cleared — water level restored",            severity: "info",
+      details: JSON.stringify({ fault_type: "dry_run_detected" }),                    timestamp: new Date(daysAgo(18).getTime() + 4 * 3_600_000) },
+    { type: "fault_detected",    description: "Over-current detected — motor current 11.2 A",            severity: "high",
+      details: JSON.stringify({ fault_type: "over_current", current: 11.2 }),         timestamp: daysAgo(25) },
+    { type: "fault_cleared",     description: "Over-current cleared after pump restart",                 severity: "info",
+      details: JSON.stringify({ fault_type: "over_current" }),                        timestamp: new Date(daysAgo(25).getTime() + 2 * 3_600_000) },
+    { type: "voltage_low",       description: "Supply voltage dropped to 208 V",                        severity: "medium",
+      details: JSON.stringify({ voltage: 208, threshold: 210 }),                      timestamp: daysAgo(14) },
+    { type: "fault_detected",    description: "Power factor dipped to 0.74 — possible cap. degradation",severity: "low",
+      details: JSON.stringify({ fault_type: "power_factor_low", pf: 0.74 }),          timestamp: daysAgo(7) },
+    { type: "communication_lost",description: "MQTT connection lost — WiFi dropout",                    severity: "high",
+      details: JSON.stringify({ downtime_s: 0 }),                                     timestamp: hoursAgo(42) },
+    { type: "communication_restored", description: "MQTT connection restored after 47 s dropout",       severity: "info",
+      details: JSON.stringify({ downtime_s: 47 }),                                    timestamp: new Date(hoursAgo(42).getTime() + 47_000) },
+    { type: "voltage_low",       description: "Supply voltage dropped to 212 V",                        severity: "medium",
+      details: JSON.stringify({ voltage: 212, threshold: 215 }),                      timestamp: hoursAgo(6) },
+    { type: "user_login",        description: "Admin signed in",                                        severity: "info",
+      details: JSON.stringify({ username: "admin", role: "administrator" }),          timestamp: minutesAgo(15) },
+    { type: "user_login",        description: "tech1 signed in",                                        severity: "info",
+      details: JSON.stringify({ username: "tech1", role: "technician" }),             timestamp: hoursAgo(2) },
+    { type: "settings_changed",  description: "Protection thresholds updated by admin",                 severity: "info",
+      details: JSON.stringify({ changed: ["protection.overCurrentA", "protection.underVoltageV"] }), timestamp: daysAgo(3) },
+    { type: "firmware_check",    description: "Firmware version check — v2.4.1 is up to date",          severity: "info",
+      details: JSON.stringify({ version: "v2.4.1", latestVersion: "v2.4.1" }),        timestamp: daysAgo(1) },
+  ];
+
+  events.push(...faultEvents);
+
+  // Sort all events by timestamp before inserting
+  events.sort((a, b) => (a.timestamp as Date).getTime() - (b.timestamp as Date).getTime());
+
+  // Insert in chunks to avoid hitting parameter limits
+  const CHUNK = 100;
+  for (let i = 0; i < events.length; i += CHUNK) {
+    await db.insert(schema.eventsTable).values(events.slice(i, i + CHUNK));
+  }
+  console.log(`  ↳  ✓  ${events.length} events created (30-day history)`);
+
+  // ── 6. Notifications — clear and re-seed ─────────────────────────────────
+  await db.delete(schema.notificationsTable);
+  await db.insert(schema.notificationsTable).values([
+    {
+      type: "fault_active", severity: "medium",
+      message: "Under-voltage fault is active — supply voltage below threshold (208 V detected)",
+      isRead: false, details: JSON.stringify({ fault_type: "under_voltage", occurrences: 7 }), timestamp: hoursAgo(6),
+    },
+    {
+      type: "fault_active", severity: "low",
+      message: "Power factor fault active — PF reading of 0.74 detected, threshold is 0.80",
+      isRead: false, details: JSON.stringify({ fault_type: "power_factor_low", occurrences: 3 }), timestamp: hoursAgo(2),
+    },
+    {
+      type: "schedule_run", severity: "info",
+      message: "Morning Run completed — 3.0 h runtime, ~2.69 kWh, KSh 66.7 estimated cost",
+      isRead: true, details: JSON.stringify({ schedule: "Morning Run", runtime_h: 3.0, energy_kwh: 2.69 }), timestamp: hoursAgo(7),
+    },
+    {
+      type: "communication_restored", severity: "info",
+      message: "MQTT connection restored after 47 s dropout — all telemetry resumed",
+      isRead: true, details: null, timestamp: hoursAgo(42),
+    },
+    {
+      type: "fault_cleared", severity: "info",
+      message: "Over-current fault cleared — pump restarted successfully after inspection",
+      isRead: true, details: JSON.stringify({ fault_type: "over_current" }), timestamp: daysAgo(21),
+    },
+  ]);
+  console.log("  ↳  ✓  5 notifications created");
+
+  // ── 7. Telemetry — 30 days × 15-min intervals (~2880 rows) ───────────────
+  await db.delete(schema.telemetryTable);
+  console.log("  ↳  Generating 30 days of 15-minute telemetry samples…");
+
+  const INTERVAL_MS = 15 * 60_000; // 15 minutes
+  const TOTAL_DAYS  = 30;
+  const startTime   = daysAgo(TOTAL_DAYS);
+
+  const now         = Date.now();
+  let accEnergy     = 0;
+  let accRuntime    = 0;
+
+  // Simulate a slow voltage drift (brownout tendency in evenings on some days)
+  const telRows: schema.InsertTelemetry[] = [];
+
+  for (let t = startTime.getTime(); t <= now; t += INTERVAL_MS) {
+    const ts    = new Date(t);
+    const running = isPumpRunning(ts);
+    const dayOfYear = Math.floor((t - startTime.getTime()) / 86_400_000);
+
+    // Occasional brownout days (days 3, 11, 14, 22, 28)
+    const brownoutDays = new Set([3, 11, 14, 22, 28]);
+    const isBrownout = brownoutDays.has(dayOfYear % 30);
+    const voltageBase = isBrownout ? 212 : 230;
+    const voltage     = parseFloat(rand(voltageBase, 3).toFixed(1));
+
+    const current     = running
+      ? parseFloat(rand(9.2, 0.5).toFixed(2))
+      : parseFloat((0.05 + Math.random() * 0.02).toFixed(3));
+    const frequency   = parseFloat(rand(50, 0.15).toFixed(2));
+    const pf          = running ? parseFloat(rand(0.89, 0.03).toFixed(3)) : 0.1;
+    const realPower   = parseFloat((voltage * current * pf).toFixed(1));
+    const apparentPower = parseFloat((voltage * current).toFixed(1));
+    const reactivePower = parseFloat(Math.sqrt(Math.max(0, apparentPower ** 2 - realPower ** 2)).toFixed(1));
+
+    const intervalHours = INTERVAL_MS / 3_600_000;
+    if (running) {
+      accRuntime += intervalHours;
+      accEnergy  += realPower / 1000 * intervalHours;
+    }
+
+    telRows.push({
+      timestamp: ts,
+      voltage,
+      current,
+      frequency,
+      realPower,
+      reactivePower,
+      apparentPower,
+      powerFactor: pf,
+      energy:   parseFloat(accEnergy.toFixed(3)),
+      runtime:  parseFloat(accRuntime.toFixed(3)),
+      internalTemp: parseFloat(rand(running ? 41 : 37, 2).toFixed(1)),
+      communicationQuality: parseFloat(rand(92, 6).toFixed(1)),
+      motorState: running ? "running" : "stopped",
+      supplyState: voltage < 210 ? "under_voltage" : "normal",
+      relayState: running ? "closed" : "open",
+    });
+  }
+
+  // Insert in chunks of 200
+  for (let i = 0; i < telRows.length; i += 200) {
+    await db.insert(schema.telemetryTable).values(telRows.slice(i, i + 200));
+  }
+  console.log(`     ✓  ${telRows.length} telemetry rows created (30 days × 15 min)`);
 
   console.log("\n✅  Seed complete.\n");
   console.log("Demo credentials:");

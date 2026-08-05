@@ -44,7 +44,17 @@ router.post("/users", requireAuth, requireRole("administrator"), async (req, res
   const { password, ...rest } = parsed.data;
   const passwordHash = await hashPassword(password);
 
-  const [user] = await db.insert(usersTable).values({ ...rest, passwordHash }).returning();
+  let user: typeof usersTable.$inferSelect;
+  try {
+    [user] = await db.insert(usersTable).values({ ...rest, passwordHash }).returning();
+  } catch (err: any) {
+    // PostgreSQL unique-constraint violation: code 23505
+    if (err?.code === "23505") {
+      res.status(409).json({ error: "A user with that username or email already exists." });
+      return;
+    }
+    throw err;
+  }
   res.status(201).json(CreateUserResponse.parse(mapUser(user)));
 });
 

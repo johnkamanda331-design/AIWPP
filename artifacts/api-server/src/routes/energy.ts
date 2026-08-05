@@ -4,6 +4,34 @@ import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
+// ─── EPRA 2024 SC-11 tariff (Kenya) ─────────────────────────────────────────
+const BAND1_ENERGY  = 15.80;
+const BAND2_ENERGY  = 15.95;
+const BAND1_LIMIT   = 1500;
+const TOTAL_LEVIES  = 5.58;   // FCC + FERFA + IAF + ERC + REP + WRMA
+const FIXED_MONTHLY = 200;    // KSh before VAT
+const VAT           = 0.16;
+
+function epraMonthlyBill(kWh: number): number {
+  const energyCharge =
+    kWh <= BAND1_LIMIT
+      ? kWh * BAND1_ENERGY
+      : BAND1_LIMIT * BAND1_ENERGY + (kWh - BAND1_LIMIT) * BAND2_ENERGY;
+  const subtotal = energyCharge + kWh * TOTAL_LEVIES + FIXED_MONTHLY;
+  return parseFloat((subtotal * (1 + VAT)).toFixed(2));
+}
+
+function epraDailyCost(kWh: number): number {
+  const energyCharge =
+    kWh <= BAND1_LIMIT
+      ? kWh * BAND1_ENERGY
+      : BAND1_LIMIT * BAND1_ENERGY + (kWh - BAND1_LIMIT) * BAND2_ENERGY;
+  // Prorate fixed charge over 30 days
+  const subtotal = energyCharge + kWh * TOTAL_LEVIES + FIXED_MONTHLY / 30;
+  return parseFloat((subtotal * (1 + VAT)).toFixed(2));
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 router.get("/energy", requireAuth, async (req, res): Promise<void> => {
   const params = GetEnergyDataQueryParams.safeParse(req.query);
   if (!params.success) {
@@ -12,36 +40,39 @@ router.get("/energy", requireAuth, async (req, res): Promise<void> => {
   }
 
   const period = params.data.period ?? "month";
-  const days = period === "day" ? 1 : period === "week" ? 7 : period === "month" ? 30 : 365;
+  const days   = period === "day" ? 1 : period === "week" ? 7 : period === "month" ? 30 : 365;
 
-  const totalConsumption = parseFloat((days * 3.92 * (1 + (Math.random() - 0.5) * 0.1)).toFixed(2));
-  // EPRA Kenya 2024 SC-11 tariff: effective rate KSh 24.80/kWh (incl. FCC, FERFA, IAF, levies, VAT 16%)
-  const electricityRate = 24.80;
-  const estimatedCost = parseFloat((totalConsumption * electricityRate).toFixed(2));
+  // Realistic base: ~3.92 kWh/day with ±10% noise
+  const rng = (base: number, pct: number) =>
+    parseFloat((base * (1 + (Math.random() - 0.5) * pct)).toFixed(3));
+
+  const totalConsumption = parseFloat((days * rng(3.92, 0.1)).toFixed(2));
 
   const dailyBreakdown = Array.from({ length: Math.min(days, 30) }, (_, i) => {
-    const date = new Date(Date.now() - (days - i - 1) * 24 * 60 * 60 * 1000);
-    const consumption = parseFloat((3.92 + (Math.random() - 0.5) * 1.2).toFixed(3));
+    const d           = new Date(Date.now() - (days - i - 1) * 86_400_000);
+    const consumption = rng(3.92, 0.3);
     return {
-      date: date.toISOString().split("T")[0],
+      date:        d.toISOString().split("T")[0],
       consumption,
-      cost: parseFloat((consumption * electricityRate).toFixed(2)),
-      runtime: parseFloat((consumption / 0.87).toFixed(2)),
+      cost:        epraDailyCost(consumption),
+      runtime:     parseFloat((consumption / 0.87).toFixed(2)),
     };
   });
+
+  const projectedMonthlyKwh = 30 * 3.92;
 
   res.json(GetEnergyDataResponse.parse({
     period,
     totalConsumption,
-    estimatedCost,
-    projectedMonthly: parseFloat((30 * 3.92 * electricityRate).toFixed(2)),
-    peakUsage: 1.12,
-    idleConsumption: parseFloat((totalConsumption * 0.03).toFixed(3)),
+    estimatedCost:    epraMonthlyBill(totalConsumption),
+    projectedMonthly: epraMonthlyBill(projectedMonthlyKwh),
+    peakUsage:        1.12,
+    idleConsumption:  parseFloat((totalConsumption * 0.03).toFixed(3)),
     dailyBreakdown,
     suggestions: [
-      "Consider scheduling pump operation during off-peak tariff hours (10pm-6am) to reduce costs by up to 23%.",
-      "Current idle power draw of 38W indicates the controller is running continuously. Consider scheduled sleep mode.",
-      "Peak demand of 1.12 kW could be reduced by staggering pump starts to avoid simultaneous startups.",
+      "Schedule pump operation during off-peak hours (22:00–06:00) — potential 18–23% cost saving under EPRA Time-of-Use conditions.",
+      "Idle power draw of 38 W is continuous. Enabling scheduled sleep mode could save ~0.9 kWh/day.",
+      "Monthly consumption of ~118 kWh is well within EPRA Band 1 (≤ 1 500 kWh). No tiered surcharge applies.",
     ],
   }));
 });

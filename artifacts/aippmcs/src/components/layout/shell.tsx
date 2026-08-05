@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { useTheme } from "next-themes";
 import {
   Activity,
   AlertTriangle,
@@ -20,6 +21,8 @@ import {
   User as UserIcon,
   HardDrive,
   ChevronLeft,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { MtiririkoLogo } from "@/components/ui/logo";
 import { Button } from "@/components/ui/button";
@@ -321,6 +324,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
               Online
             </div>
+            <ThemeToggle />
             <Link href="/notifications">
               <Button variant="ghost" size="icon" className="relative h-8 w-8 cursor-pointer">
                 <Bell className="w-4 h-4" />
@@ -338,5 +342,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
     </div>
+  );
+}
+
+function ThemeToggle() {
+  const { resolvedTheme, setTheme } = useTheme();
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-8 w-8"
+      aria-label="Toggle colour scheme"
+      onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+    >
+      {resolvedTheme === "dark"
+        ? <Sun  className="w-4 h-4" />
+        : <Moon className="w-4 h-4" />}
+    </Button>
   );
 }

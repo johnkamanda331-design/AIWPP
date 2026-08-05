@@ -142,6 +142,15 @@
   --shadow-lg: 0px 16px 24px rgba(0,0,0,0.15);
   --shadow-xl: 0px 24px 32px rgba(0,0,0,0.2);
   --shadow-2xl: 0px 32px 48px rgba(0,0,0,0.25);
+
+  /* ── Border accent variants (used in @theme inline via var()) ───────────── */
+  --primary-border: hsl(152 68% 32% / 0.28);
+  --secondary-border: hsl(210 10% 82%);
+  --muted-border: hsl(210 10% 85%);
+  --accent-border: hsl(152 68% 32% / 0.28);
+  --destructive-border: hsl(0 80% 55% / 0.3);
+  --sidebar-primary-border: hsl(152 68% 30% / 0.45);
+  --sidebar-accent-border: hsl(210 15% 28% / 0.6);
 }
 
 .dark {
@@ -201,6 +210,15 @@
   --chart-3: 0 70% 60%;
   --chart-4: 210 80% 60%;
   --chart-5: 280 60% 65%;
+
+  /* ── Border accent variants (dark mode) ─────────────────────────────────── */
+  --primary-border: hsl(152 68% 40% / 0.32);
+  --secondary-border: hsl(210 15% 30%);
+  --muted-border: hsl(210 15% 28%);
+  --accent-border: hsl(152 68% 40% / 0.32);
+  --destructive-border: hsl(0 70% 60% / 0.32);
+  --sidebar-primary-border: hsl(152 68% 40% / 0.45);
+  --sidebar-accent-border: hsl(210 15% 30% / 0.6);
 }
 
 @layer base {

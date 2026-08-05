@@ -35,9 +35,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
-type NavItem = { href: string; label: string; icon: React.ComponentType<{ className?: string }> };
-type NavSection = { title: string; items: NavItem[] };
 type Role = "administrator" | "technician" | "maintenance" | "viewer";
+type NavItem = { href: string; label: string; icon: React.ComponentType<{ className?: string }>; allowedRoles?: Role[] };
+type NavSection = { title: string; items: NavItem[] };
 
 const ROLE_META: Record<Role, {
   label: string;
@@ -51,13 +51,16 @@ const ROLE_META: Record<Role, {
   viewer:        { label: "Viewer",        icon: EyeIcon,     color: "text-muted-foreground",              bg: "bg-secondary border-border"                   },
 };
 
+const ADMIN_TECH: Role[] = ["administrator", "technician", "maintenance"];
+const ADMIN_ONLY: Role[] = ["administrator"];
+
 const NAV_SECTIONS: NavSection[] = [
   {
     title: "Operations",
     items: [
       { href: "/", label: "Dashboard", icon: Activity },
       { href: "/monitoring", label: "Live Monitoring", icon: Radio },
-      { href: "/control", label: "Remote Control", icon: Power },
+      { href: "/control", label: "Remote Control", icon: Power, allowedRoles: ADMIN_TECH },
     ],
   },
   {
@@ -87,8 +90,8 @@ const NAV_SECTIONS: NavSection[] = [
   {
     title: "System",
     items: [
-      { href: "/settings", label: "Settings", icon: Settings },
-      { href: "/firmware", label: "Firmware OTA", icon: HardDrive },
+      { href: "/settings", label: "Settings", icon: Settings, allowedRoles: ADMIN_ONLY },
+      { href: "/firmware", label: "Firmware OTA", icon: HardDrive, allowedRoles: ADMIN_ONLY },
     ],
   },
 ];
@@ -130,43 +133,51 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const pageTitle = PAGE_TITLES[location] ?? location.substring(1).replace(/-/g, " ");
 
+  const userRole = user?.role as Role | undefined;
+  const canSee = (item: NavItem) =>
+    !item.allowedRoles || (userRole && item.allowedRoles.includes(userRole));
+
   const allNavItems: NavItem[] = [
-    ...NAV_SECTIONS.flatMap(s => s.items),
-    ...(user?.role === "administrator" ? [{ href: "/users", label: "User Management", icon: Users }] : []),
+    ...NAV_SECTIONS.flatMap(s => s.items).filter(canSee),
+    ...(userRole === "administrator" ? [{ href: "/users", label: "User Management", icon: Users }] : []),
   ];
 
   /* Full-width nav links used in mobile Sheet */
   const NavLinks = ({ onClick }: { onClick?: () => void }) => (
     <div className="flex flex-col gap-5 w-full">
-      {NAV_SECTIONS.map((section) => (
-        <div key={section.title}>
-          <div className="px-3 mb-1">
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/35 select-none">
-              {section.title}
-            </span>
+      {NAV_SECTIONS.map((section) => {
+        const visibleItems = section.items.filter(canSee);
+        if (visibleItems.length === 0) return null;
+        return (
+          <div key={section.title}>
+            <div className="px-3 mb-1">
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/35 select-none">
+                {section.title}
+              </span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              {visibleItems.map((item) => {
+                const isActive = location === item.href;
+                return (
+                  <Link key={item.href} href={item.href} onClick={onClick}>
+                    <div className={cn(
+                      "flex items-center gap-3 px-3 py-2 rounded-md transition-all text-sm font-medium cursor-pointer group",
+                      isActive
+                        ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
+                        : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    )}>
+                      <item.icon className={cn("w-4 h-4 shrink-0 transition-opacity", isActive ? "opacity-100" : "opacity-50 group-hover:opacity-80")} />
+                      <span className="truncate">{item.label}</span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
           </div>
-          <div className="flex flex-col gap-0.5">
-            {section.items.map((item) => {
-              const isActive = location === item.href;
-              return (
-                <Link key={item.href} href={item.href} onClick={onClick}>
-                  <div className={cn(
-                    "flex items-center gap-3 px-3 py-2 rounded-md transition-all text-sm font-medium cursor-pointer group",
-                    isActive
-                      ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
-                      : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                  )}>
-                    <item.icon className={cn("w-4 h-4 shrink-0 transition-opacity", isActive ? "opacity-100" : "opacity-50 group-hover:opacity-80")} />
-                    <span className="truncate">{item.label}</span>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      ))}
+        );
+      })}
 
-      {user?.role === "administrator" && (
+      {userRole === "administrator" && (
         <div>
           <div className="px-3 mb-1">
             <span className="text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/35 select-none">Admin</span>

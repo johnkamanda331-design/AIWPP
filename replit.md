@@ -32,15 +32,32 @@ The frontend proxies all `/api/*` requests to the API server (configured in `art
 
 On a fresh database, visit `/login` and use the **Register** flow — the first account is automatically created as administrator. Subsequent accounts must be created by an administrator via the Users page or `POST /api/users`.
 
+## Demo data / seeding
+
+Run the seed script to populate the database with realistic demo data (users, events, faults, schedules, telemetry, settings):
+
+```bash
+NEON_DATABASE_URL=$NEON_DATABASE_URL pnpm --filter @workspace/db run seed
+```
+
+Demo credentials (safe to re-run — skips rows that already exist by username):
+
+| Username | Password | Role |
+|---|---|---|
+| admin | Admin@1234 | Administrator |
+| tech1 | Tech@1234 | Technician |
+| maint1 | Maint@1234 | Maintenance |
+| viewer1 | Viewer@1234 | Viewer |
+
 ## Database
 
 Schema managed with Drizzle ORM. To push schema changes:
 
 ```bash
-cd lib/db && DATABASE_URL=$DATABASE_URL pnpm exec drizzle-kit push
+NEON_DATABASE_URL=$NEON_DATABASE_URL pnpm --filter @workspace/db run push
 ```
 
-Tables: `users`, `events`, `faults`, `schedules`, `notifications`, `settings`, `control_commands`
+Tables: `users`, `events`, `faults`, `schedules`, `notifications`, `settings`, `telemetry`, `control_commands`
 
 ## Pages
 

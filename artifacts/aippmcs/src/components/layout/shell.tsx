@@ -23,6 +23,10 @@ import {
   ChevronLeft,
   Sun,
   Moon,
+  ShieldCheck,
+  UserCog,
+  Wrench,
+  Eye as EyeIcon,
 } from "lucide-react";
 import { MtiririkoLogo } from "@/components/ui/logo";
 import { Button } from "@/components/ui/button";
@@ -33,6 +37,19 @@ import { cn } from "@/lib/utils";
 
 type NavItem = { href: string; label: string; icon: React.ComponentType<{ className?: string }> };
 type NavSection = { title: string; items: NavItem[] };
+type Role = "administrator" | "technician" | "maintenance" | "viewer";
+
+const ROLE_META: Record<Role, {
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  color: string;
+  bg: string;
+}> = {
+  administrator: { label: "Administrator", icon: ShieldCheck, color: "text-primary",                    bg: "bg-primary/10 border-primary/30"              },
+  technician:    { label: "Technician",    icon: UserCog,     color: "text-blue-600 dark:text-blue-400",   bg: "bg-blue-500/10 border-blue-500/30"            },
+  maintenance:   { label: "Maintenance",   icon: Wrench,      color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10 border-amber-500/30"          },
+  viewer:        { label: "Viewer",        icon: EyeIcon,     color: "text-muted-foreground",              bg: "bg-secondary border-border"                   },
+};
 
 const NAV_SECTIONS: NavSection[] = [
   {
@@ -242,53 +259,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Footer — user + logout */}
-        <div className={cn("border-t border-sidebar-border/60", collapsed ? "p-2" : "p-3")}>
-          {collapsed ? (
-            <div className="flex flex-col items-center gap-1">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="w-9 h-9 rounded-full bg-sidebar-accent flex items-center justify-center border border-sidebar-border cursor-default">
-                    <UserIcon className="w-4 h-4 text-sidebar-foreground/70" />
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="right" className="text-xs">
-                  <p className="font-medium">{user?.username}</p>
-                  <p className="capitalize text-muted-foreground">{user?.role}</p>
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={() => logout()}
-                    className="w-9 h-9 flex items-center justify-center rounded-md text-sidebar-foreground/40 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right" className="text-xs">Log out</TooltipContent>
-              </Tooltip>
-            </div>
-          ) : (
-            <>
-              <div className="flex items-center gap-2.5 px-2 py-2 mb-1">
-                <div className="w-7 h-7 rounded-full bg-sidebar-accent flex items-center justify-center border border-sidebar-border flex-shrink-0">
-                  <UserIcon className="w-3.5 h-3.5 text-sidebar-foreground/70" />
-                </div>
-                <div className="flex flex-col overflow-hidden min-w-0">
-                  <span className="text-sm font-medium text-sidebar-foreground truncate leading-tight">{user?.username}</span>
-                  <span className="text-[11px] text-sidebar-foreground/40 capitalize truncate leading-tight">{user?.role}</span>
-                </div>
-              </div>
-              <button
-                onClick={() => logout()}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
-              >
-                <LogOut className="w-3.5 h-3.5 shrink-0" />
-                Log out
-              </button>
-            </>
-          )}
-        </div>
+        <SidebarFooter collapsed={collapsed} user={user} onLogout={logout} />
       </aside>
 
       {/* ── Main Content ────────────────────────────────────────────────────── */}
@@ -341,6 +312,81 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </main>
       </div>
+    </div>
+  );
+}
+
+// ─── Sidebar Footer ───────────────────────────────────────────────────────────
+
+function SidebarFooter({
+  collapsed,
+  user,
+  onLogout,
+}: {
+  collapsed: boolean;
+  user: ReturnType<typeof useAuth>["user"];
+  onLogout: () => void;
+}) {
+  const roleMeta = user ? ROLE_META[user.role as Role] : null;
+  const RoleIcon = roleMeta?.icon ?? UserIcon;
+
+  if (collapsed) {
+    return (
+      <div className={cn("border-t border-sidebar-border/60 p-2")}>
+        <div className="flex flex-col items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className={cn(
+                "w-9 h-9 rounded-full flex items-center justify-center border cursor-default",
+                roleMeta ? roleMeta.bg : "bg-sidebar-accent border-sidebar-border",
+              )}>
+                <RoleIcon className={cn("w-4 h-4", roleMeta?.color ?? "text-sidebar-foreground/70")} />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="right" className="text-xs">
+              <p className="font-medium">{user?.username}</p>
+              <p className={cn("font-medium", roleMeta?.color)}>{roleMeta?.label ?? user?.role}</p>
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={onLogout}
+                className="w-9 h-9 flex items-center justify-center rounded-md text-sidebar-foreground/40 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right" className="text-xs">Log out</TooltipContent>
+          </Tooltip>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-t border-sidebar-border/60 p-3">
+      <div className="flex items-center gap-2.5 px-2 py-2 mb-1">
+        <div className={cn(
+          "w-7 h-7 rounded-full flex items-center justify-center border flex-shrink-0",
+          roleMeta ? roleMeta.bg : "bg-sidebar-accent border-sidebar-border",
+        )}>
+          <RoleIcon className={cn("w-3.5 h-3.5", roleMeta?.color ?? "text-sidebar-foreground/70")} />
+        </div>
+        <div className="flex flex-col overflow-hidden min-w-0">
+          <span className="text-sm font-medium text-sidebar-foreground truncate leading-tight">{user?.username}</span>
+          <span className={cn("text-[11px] truncate leading-tight font-medium", roleMeta?.color ?? "text-sidebar-foreground/40")}>
+            {roleMeta?.label ?? user?.role}
+          </span>
+        </div>
+      </div>
+      <button
+        onClick={onLogout}
+        className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+      >
+        <LogOut className="w-3.5 h-3.5 shrink-0" />
+        Log out
+      </button>
     </div>
   );
 }

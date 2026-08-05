@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { GetFirmwareInfoResponse, TriggerFirmwareUpdateBody, TriggerFirmwareUpdateResponse } from "@workspace/api-zod";
-import { requireAuth } from "../middlewares/auth";
+import { requireAuth, requireRole } from "../middlewares/auth";
 
 const router: IRouter = Router();
 

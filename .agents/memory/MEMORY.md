@@ -1,3 +1,4 @@
 - [Frontend port wiring](frontend-port.md) — aippmcs Vite dev server must be started with PORT=22559; omitting it defaults to 5173 and the preview proxy shows a blank page
 - [Upgrade batch completed](upgrade-batch.md) — security, backend, DB schema, and frontend upgrades implemented; what's done and what remains
 - [Artifact registration on GitHub import](artifact-registration.md) — imported artifacts with artifact.toml are not auto-registered; must backup → createArtifact → restore to enroll them
+- [Auth RBAC completion](auth-rbac.md) — router ProtectedRoute is role-aware; settings PUT is admin-only; sidebar shows colored role badge; nav still shows restricted items to all users (follow-up #2)

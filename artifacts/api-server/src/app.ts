@@ -24,6 +24,11 @@ if (!SESSION_SECRET || SESSION_SECRET === "aippmcs-dev-secret-change-in-prod") {
 
 const app: Express = express();
 
+// ── Trust the Replit proxy so rate-limiter reads the real client IP ───────────
+// Replit terminates TLS at its edge and forwards requests via a single proxy.
+// Setting trust proxy = 1 tells express-rate-limit to read X-Forwarded-For.
+app.set("trust proxy", 1);
+
 // ── Security headers ─────────────────────────────────────────────────────────
 app.use(
   helmet({
